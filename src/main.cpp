@@ -26,34 +26,63 @@ auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
   return end;
 }
 
-void parse_arguments(int argc, char *argv[], int *background_frames,
-                     int *particle_frames, double *particle_distance,
-                     double *roi_size, double *zscore, bool *draw,
-                     bool *export_images) {
-  for (int i = 2; i < argc; ++i) {
-    auto arg = std::string(argv[i]);
-    if (arg.substr(0, 2) == "--") {
-      auto arg_name = arg.substr(2);
-      if (arg_name == "background-frames") {
-        *background_frames = std::stoi(argv[++i]);
-      } else if (arg_name == "check-frames") {
-        *particle_frames = std::stoi(argv[++i]);
-      } else if (arg_name == "particle_distance") {
-        *particle_distance = static_cast<double>(std::stod(argv[++i]));
-      } else if (arg_name == "roi_size") {
-        *roi_size = static_cast<double>(std::stod(argv[++i]));
-      } else if (arg_name == "zscore") {
-        *zscore = static_cast<double>(std::stod(argv[++i]));
-      } else if (arg_name == "draw") {
-        *draw = true;
-      } else if (arg_name == "export-images") {
-        *export_images = true;
-      } else {
-        std::cerr << "unknown argument: " << arg_name << std::endl;
+class Parser {
+private:
+  std::vector<std::string> args;
+
+public:
+  Parser(int argc, char *argv[]) {
+    args = std::vector<std::string>(argv, argv + argc);
+  }
+
+  template <typename T>
+  T read(const std::string &name, const T &default_value,
+         bool required = false) {
+    T value = default_value;
+    for (auto it = args.begin(); it != args.end(); ++it) {
+      if ((*it).substr(2) == name) {
+        // shortcut for flags
+        if (std::is_same<T, bool>::value) {
+          return true;
+        }
+        ++it;
+        std::istringstream iss(*it);
+        if (!(iss >> value)) {
+          throw std::invalid_argument("unable to read '" + *it +
+                                      "' into arg '" + name + "'");
+        };
+        return value;
       }
     }
+    if (required) {
+      throw std::invalid_argument("missing argument '" + name + "'");
+    }
+    return value;
   }
-}
+
+  // template <typename T>
+  // void read(const std::string &name, T &value, bool required = true) {
+  //   for (auto it = args.begin(); it != args.end(); ++it) {
+  //     if ((*it).substr(2) == name) {
+  //       // shortcut for flags
+  //       if (std::is_same<T, bool>::value) {
+  //         value = true;
+  //         return;
+  //       }
+  //       ++it;
+  //       std::istringstream iss(*it);
+  //       if (!iss >> value) {
+  //         throw std::invalid_argument("unable to read '" + *it +
+  //                                     "' into arg '" + name + "'");
+  //       };
+  //       return;
+  //     }
+  //   }
+  //   if (required) {
+  //     throw std::invalid_argument("missing argument '" + name + "'");
+  //   }
+  // }
+};
 
 std::pair<cv::Mat, cv::Mat> measure_background(cv::VideoCapture &cap,
                                                double time) {
@@ -253,19 +282,16 @@ int main(int argc, char *argv[]) {
   // find and check parameters
   std::filesystem::path path(argv[1]);
 
-  // std::string path(argv[1]);
-  int background_frames = 500;
-  int particle_frames = 10;
-  double particle_distance = 10.0;
-  double zscore = 3.0;
   double roi_size_um = 750.0;
-  bool draw_frames = false;
-  bool export_images = true;
   int particle_image_scale = 1;
+  bool export_images = true;
 
-  parse_arguments(argc, argv, &background_frames, &particle_frames,
-                  &particle_distance, &roi_size_um, &zscore, &draw_frames,
-                  &export_images);
+  auto parser = Parser(argc, argv);
+  int background_frames = parser.read("background-frames", 1000);
+  int particle_frames = parser.read("particle-frames", 10);
+  double particle_distance = parser.read("particle-distance", 10.0);
+  double zscore = parser.read("zscore", 3.0);
+  bool draw_frames = parser.read("draw", false);
 
   // create capture and read some props
   auto cap = cv::VideoCapture(path, cv::CAP_FFMPEG);
