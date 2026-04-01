@@ -1,56 +1,71 @@
 #pragma once
 
-/* args_parse Parser class:
- *
- * Initialise with an optional program name Parser parser(<PROG_NAME>)
- *
- * Add any options / args required using addOption and addPositional.
- * .addOption<TYPE>(<LONG_NAME>, <CHAR>, <HELP_DESC>,
- * .addPositional(<NAME>).
- * If not a simple switch (true/false) use:
- * .addOption<TYPE>(<LONG_NAME>, <CHAR>, <HELP_DESC>,
- *                  <DEFAULT_VAL>, <NUM_REQ_ARGS>)
- *
- * Parse input using .parse(argc, argv).
- *
- * Options can be accessed using [<NAME>] (returns true if used)
- * or .option<TYPE>(<NAME>) that will return the value casted as <TYPE>.
- * Positional accessed using .positional(<NAME>).
- *
- * Passing the parser object to a stream will print generated help text
- * Additional text to printed can be added using .addText(<TEXT>).
- */
-
-#include <map>
+#include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
-class Arg {
+class ArgumentParser {
 private:
-  int _nargs;
-  std::string _desc;
-  std::string _default;
+  std::vector<std::string> args;
+  bool valid = true;
+  std::vector<std::string> help_strings;
 
 public:
-  Arg(const int nargs, const std::string &desc = "",
-      const std::string &default_value = "")
-      : _nargs(nargs), _desc(desc), _default(default_value) {}
-};
+  ArgumentParser(int argc, char *argv[]) {
 
-class Parser {
-private:
-  std::string _prog;
-  std::string _;
-  std::map<std::string, Arg> _args;
-
-public:
-  template <typename T>
-  void addArg(const std::string &name, const int nargs = 0,
-              const std::string &desc = "",
-              const std::string &default_value = "") {
-    auto arg = Arg(nargs, desc, default_value);
-    _args.insert({name, arg});
+    args = std::vector<std::string>(argv, argv + argc);
   }
 
-  void parse(const std::string &text) {}
+  template <typename T>
+  std::string help_string(const std::string &name, const T &default_value,
+                          bool required, const std::string &help) {
+    std::ostringstream oss;
+    oss << "--" << name;
+    if (required)
+      oss << " (required)";
+    oss << ", " << help << ", default = " << default_value;
+    return oss.str();
+  }
+
+  template <typename T>
+  T read(const std::string &name, const T &default_value,
+         const std::string &help = "", bool required = false) {
+
+    help_strings.push_back(help_string(name, default_value, required, help));
+
+    T value = default_value;
+    for (auto it = args.begin(); it != args.end(); ++it) {
+      if (*it == "--help")
+        valid = false;
+      if ((*it).substr(0, 2) == "--" && (*it).substr(2) == name) {
+        // shortcut for flags
+        if constexpr (std::is_same<T, bool>::value) {
+          return true;
+        }
+        std::istringstream iss(*(++it));
+        if (!(iss >> value)) {
+          std::cerr << "unable to read '" + *it + "' into arg '" + name + "'"
+                    << std::endl;
+          valid = false;
+        };
+        return value;
+      }
+    } // end for
+
+    if (required) {
+      std::cerr << "missing required argument '" + name + "'" << std::endl;
+      valid = false;
+    }
+    return value;
+  }
+
+  bool success() { return valid; }
+
+  friend std::ostream &operator<<(std::ostream &os, const ArgumentParser &p) {
+    for (auto it = p.help_strings.begin(); it != p.help_strings.end(); ++it) {
+      os << *it << std::endl;
+    }
+    return os;
+  }
 };

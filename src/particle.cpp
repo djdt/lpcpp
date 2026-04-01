@@ -3,7 +3,6 @@
 #include <opencv2/imgcodecs.hpp>
 
 #include <execution>
-#include <iostream>
 
 Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
                    int frame_number, int id, int image_scale)
@@ -119,11 +118,6 @@ double Particle::radiusAtQuantile(const double quantile) const {
                      return values.at<float>(a) < values.at<float>(b);
                    });
   auto q = values.at<float>(points[points.size() * quantile]);
-  // double min, max;
-  // cv::minMaxLoc(_image, &min, &max, nullptr, nullptr, imageMask());
-  // auto q = (max - min) / 3.0 * 2.0;
-  // cv::Mat _m;
-  // auto q = cv::threshold(_image, _m, 0.0, 0.0, cv::THRESH_OTSU);
 
   cv::Mat qmask;
   cv::threshold(values, qmask, q, 255, cv::THRESH_BINARY);
@@ -141,14 +135,6 @@ double Particle::radiusAtQuantile(const double quantile) const {
       contours[0].begin(), contours[0].end(), 0.0,
       [&c](double sum, const cv::Point2f &p) { return sum + cv::norm(p - c); });
   return dist / contours[0].size();
-  //   const cv::Point2f c =
-  //         center();
-  // double dist = std::accumulate(
-  //     _contour.begin(), _contour.end(), 0.0,
-  //     [&c](double sum, const cv::Point2f &p) { return sum + cv::norm(p -
-  //     c);
-  //     });
-  // return dist / _contour.size();
 }
 
 double Particle::sharpness() const {

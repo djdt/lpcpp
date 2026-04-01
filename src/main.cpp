@@ -12,6 +12,7 @@
 #include <opencv2/videoio.hpp>
 #include <string>
 
+#include "parser.hpp"
 #include "particle.hpp"
 
 template <typename Iter, typename IdxIter>
@@ -26,123 +27,14 @@ auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
   return end;
 }
 
-class Parser {
-private:
-  std::vector<std::string> args;
-  bool valid = true;
-  std::vector<std::string> help_texts;
-
-public:
-  Parser(int argc, char *argv[]) {
-
-    args = std::vector<std::string>(argv, argv + argc);
-  }
-
-  template <typename T>
-  T read(const std::string &name, const T &default_value, bool required = false,
-         const std::string &help = "") {
-    std::ostringstream oss;
-    oss << "--" << name;
-    if (required) {
-      oss << " (required)";
-    }
-    oss << ", " << help << ", default = " << default_value;
-    help_texts.push_back(oss.str());
-
-    T value = default_value;
-    for (auto it = args.begin(); it != args.end(); ++it) {
-      if ((*it).substr(0, 2) == "--") {
-        if ((*it).substr(2) == "help") {
-          valid = false;
-        } else if ((*it).substr(2) == name) {
-          // shortcut for flags
-          if (std::is_same<T, bool>::value) {
-            return true;
-          }
-          ++it;
-          std::istringstream iss(*it);
-          if (!(iss >> value)) {
-            std::cerr << "unable to read '" + *it + "' into arg '" + name + "'"
-                      << std::endl;
-            valid = false;
-          };
-          return value;
-        }
-      }
-    }
-    if (required) {
-      std::cerr << "missing required argument '" + name + "'" << std::endl;
-      valid = false;
-    }
-    return value;
-  }
-
-  bool success() { return valid; }
-
-  friend std::ostream &operator<<(std::ostream &os, const Parser &p) {
-    for (auto it = p.help_texts.begin(); it != p.help_texts.end(); ++it) {
-      os << *it << std::endl;
-    }
-    return os;
-  }
-};
-
-std::pair<cv::Mat, cv::Mat> measure_background(cv::VideoCapture &cap,
-                                               double time) {
-
-  int fps = cap.get(cv::CAP_PROP_FPS);
-  int max_frames = static_cast<int>(fps * time);
-
-  std::vector<cv::Mat> frames;
-  frames.reserve(max_frames);
-
-  cv::Mat frame;
-  int current_frame = 0;
-  while (current_frame++ < max_frames) {
-    cap.read(frame);
-    if (frame.empty()) {
-      std::cerr << "insufficient background frames, exiting early" << std::endl;
-      break;
-    }
-    cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
-    frame.convertTo(frame, CV_32F, 1.0 / 255.0);
-    frames.push_back(frame);
-  }
-  int n_frames = frames.size();
-
-  cv::Mat mean = std::transform_reduce(
-      frames.begin(), frames.end(),
-      cv::Mat::zeros(frame.size.dims(), frame.size, CV_32F), std::plus{},
-      [&](cv::Mat &val) { return val / n_frames; });
-
-  cv::Mat var = std::transform_reduce(
-      frames.begin(), frames.end(),
-      cv::Mat::zeros(frame.size.dims(), frame.size, CV_32F), std::plus{},
-      [&](cv::Mat &val) {
-        cv::Mat x;
-        cv::pow(val - mean, 2.0, x);
-        return x / (n_frames - 1);
-      });
-  cv::sqrt(var, var);
-
-  mean.convertTo(mean, CV_8U, 255.0);
-  var.convertTo(var, CV_8U, 255.0);
-
-  return {mean, var};
-}
-
 bool find_camera_roi(const cv::Mat &mean, cv::Vec3f &roi) {
   std::vector<cv::Vec3f> circles;
   cv::HoughCircles(mean, circles, cv::HOUGH_GRADIENT, 1.0,
                    static_cast<int>(mean.rows / 2), 50, 5, mean.rows / 4);
 
   if (circles.size() == 0) {
-    std::cerr << "could not detect frame ROI, exiting" << std::endl;
     return true;
   }
-  std::cout << "ROI detected at " << circles[0][0] << " x " << circles[0][1]
-            << " with radius " << circles[0][2] << std::endl;
-
   roi = circles[0];
   return false;
 }
@@ -200,10 +92,7 @@ void filter_existing_particles(std::deque<std::vector<Particle>> &particles,
                               it_new != new_particles.end(); ++it_new) {
                            if (it_new->is_close(old, edge_distance)) {
                              auto norm_new = it_new->centerWeightedIntensity();
-                             // /
-                             //                       it_new->area();
                              auto norm_old = old.centerWeightedIntensity();
-                             // / old.area();
                              if (norm_new > norm_old) {
                                it_new->addFrame();
                                return true; // old is removed
@@ -236,44 +125,34 @@ void filter_existing_particles(std::deque<std::vector<Particle>> &particles,
   }
 }
 
-void update_progress(
-    std::chrono::time_point<std::chrono::system_clock> start_time, int frame,
-    int frame_count) {
+std::chrono::duration<double> get_remaining_time(
+    std::chrono::time_point<std::chrono::system_clock> start_time, int n,
+    int count, double &fps) {
   auto frame_time = std::chrono::system_clock::now();
   auto duration = std::chrono::duration<double>(frame_time - start_time);
-  double fps = static_cast<double>(frame) / duration.count();
   std::chrono::duration remaining =
-      duration *
-          (static_cast<double>(frame_count) / static_cast<double>(frame)) -
+      duration * (static_cast<double>(count) / static_cast<double>(n)) -
       duration;
-
-  std::cout << "Processing frame " << frame << "/" << frame_count << " @ ";
-  std::cout << std::setw(5) << std::setprecision(5) << fps << " FPS. ";
-  std::cout << std::format("{:%T}", remaining) << " \r" << std::flush;
+  fps = static_cast<double>(n) / duration.count();
+  return remaining;
 }
 
-cv::Mat richardson_lucy(const cv::Mat &input, const cv::Mat &psf,
-                        int iterations = 3) {
-
-  cv::Mat est = cv::Mat(2, input.size, CV_32F, 0.5);
-  cv::Mat psf_hat;
-  cv::flip(psf, psf_hat, -1);
-
-  cv::Mat est_conv, relative_blur, error_est;
-  for (int i = 0; i < iterations; ++i) {
-    cv::filter2D(est, est_conv, -1, psf);
-    relative_blur = input.mul(1.0 / est_conv);
-    cv::filter2D(relative_blur, error_est, -1, psf_hat);
-    est = est.mul(error_est);
+void read_filter_config(std::string path, filter_args &args) {
+  std::fstream ifs(path);
+  std::string line;
+  while (!ifs.eof()) {
+    ifs >> line;
+    if (line == "area")
+      ifs >> args.min_area >> args.max_area;
+    else if (line == "aspect")
+      ifs >> args.min_aspect >> args.max_aspect;
+    else if (line == "circularity")
+      ifs >> args.min_circularity >> args.max_circularity;
+    else if (line == "convexity")
+      ifs >> args.min_convexity >> args.max_convexity;
+    else if (line == "radius")
+      ifs >> args.min_radius >> args.max_radius;
   }
-  return est;
-}
-
-cv::Mat gaussian_kernel(int rows, int cols, float sigma) {
-  cv::Mat kernel = cv::Mat::zeros(rows, cols, CV_32F);
-  kernel.at<float>(rows / 2, cols / 2) = 1.f;
-  cv::GaussianBlur(kernel, kernel, cv::Size(rows - 1, cols - 1), sigma);
-  return kernel;
 }
 
 int main(int argc, char *argv[]) {
@@ -289,20 +168,39 @@ int main(int argc, char *argv[]) {
   int particle_image_scale = 1;
   bool export_images = true;
 
-  auto parser = Parser(argc, argv);
+  auto parser = ArgumentParser(argc, argv);
   int background_frames = parser.read(
-      "background-frames", 1000, false,
+      "background-frames", 1000,
       "number of background frames used to determine initial mean and std");
   int particle_frames =
-      parser.read("particle-frames", 10, false,
+      parser.read("particle-frames", 10,
                   "number of frames to track particles after last detection");
-  double particle_distance = parser.read("particle-distance", 10.0, false,
+  double particle_distance = parser.read("particle-distance", 10.0,
                                          "minimum distance between particles");
-  double zscore =
-      parser.read("zscore", 3.0, false,
-                  "number of stddevs above the background mean for threshold");
-  bool draw_frames =
-      parser.read("draw", false, false, "show video and detections");
+  double zscore = parser.read(
+      "zscore", 3.0, "number of std above the background mean to threshold");
+  bool draw_frames = parser.read("draw", false, "show video and detections");
+  std::string config_path = parser.read<std::string>(
+      "config", std::string(),
+      "path to filter config, with lines: 'VALUE MIN MAX'\n"
+      "\tvalid values are: 'area', 'aspect', circularity', 'convexity', "
+      "'radius'");
+
+  filter_args particle_filter_args{
+      .min_area = 5.0,
+      .max_area = 9999.0,
+      .min_aspect = 0.7,
+      .max_aspect = 1.0,
+      .min_circularity = 0.8,
+      .max_circularity = 1.0,
+      .min_convexity = 0.9,
+      .max_convexity = 1.0,
+      .min_radius = 1.0,
+      .max_radius = 200.0,
+  };
+  if (!config_path.empty()) {
+    read_filter_config(config_path, particle_filter_args);
+  }
 
   if (!parser.success()) {
     std::cerr << "Usage: lpcpp FILE [options]" << std::endl;
@@ -332,20 +230,29 @@ int main(int argc, char *argv[]) {
   cap.read(frame);
   cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
 
+  std::cout << "Processsing " << path << std::endl;
+  std::cout << "\tframes = " << nframes << std::endl;
+  std::cout << "\tsize = " << width << " x " << height << std::endl;
+
   cv::Vec3f roi;
   if (find_camera_roi(frame, roi)) {
+    std::cerr << "\tcould not detect frame ROI, exiting" << std::endl;
     return 1;
   } else {
-    cv::Mat roi_frame;
-    cv::cvtColor(frame, roi_frame, cv::COLOR_GRAY2BGR);
-    cv::circle(roi_frame, cv::Point(roi[0], roi[1]), roi[2],
-               cv::Scalar(0, 0, 255), 1);
-    cv::imwrite(proc_dir / "roi.png", roi_frame);
+    std::cout << "\tROI detected at " << roi[0] << " x " << roi[1]
+              << " with radius " << roi[2] << std::endl;
+    //
+    // cv::Mat roi_frame;
+    // cv::cvtColor(frame, roi_frame, cv::COLOR_GRAY2BGR);
+    // cv::circle(roi_frame, cv::Point(roi[0], roi[1]), roi[2],
+    //            cv::Scalar(0, 0, 255), 1);
+    // cv::imwrite(proc_dir / "roi.png", roi_frame);
   }
+
   // calculate the pixel size
   double um_per_px = roi_size_um / (2.0 * roi[2]);
-  std::cout << "Pixel size = " << std::setprecision(4) << um_per_px << " µm"
-            << std::endl;
+  std::cout << "\tpixel size = " << std::setprecision(4) << um_per_px << " µm";
+  std::cout << std::endl << std::endl;
 
   cv::Mat mask = cv::Mat::zeros(frame.rows, frame.cols, CV_8U);
   cv::circle(mask, cv::Point(roi[0], roi[1]), roi[2] * 0.9, 255, -1);
@@ -363,10 +270,9 @@ int main(int argc, char *argv[]) {
   std::deque<std::vector<Particle>> particles;
 
   auto start_time = std::chrono::system_clock::now();
-  std::cout << "Processing " << nframes << " frames..." << std::endl;
-
   int frames = 1;
   int particle_id = 0;
+  int particle_count = 0;
   while (true) {
 
     // read in a new frame
@@ -375,11 +281,6 @@ int main(int argc, char *argv[]) {
       break;
     }
     cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
-    // update every second or so
-    if (frames % 100 == 0) {
-      update_progress(start_time, frames, nframes);
-    }
-    frames++;
 
     // update the accumulated mean and variance
     cv::accumulateWeighted(frame, acc_mean, 1.0 / static_cast<double>(frames));
@@ -388,6 +289,19 @@ int main(int argc, char *argv[]) {
     cv::pow(frame_var - acc_mean, 2.0, frame_var);
     cv::accumulateWeighted(frame_var, acc_var,
                            1.0 / static_cast<double>(frames));
+
+    // update progress every second or so
+    if (frames % 100 == 0) {
+      double fps;
+      auto remaining = get_remaining_time(start_time, frames, nframes, fps);
+
+      std::cout << "\t...frame " << frames << "/" << nframes << " @ ";
+      std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
+      std::cout << particle_count << " particles, ";
+      std::cout << std::format("{:%T}", remaining) << " remaining.\r"
+                << std::flush;
+    }
+    frames++;
 
     if (frames < background_frames) {
       continue;
@@ -402,18 +316,11 @@ int main(int argc, char *argv[]) {
     frame.convertTo(diff, CV_32F);
     diff -= acc_mean;
     cv::medianBlur(diff, diff, 3);
-    // diff = cv::abs(diff);
 
     // mask differences below x std deviations
     cv::Mat thresh = cv::Mat::zeros(2, diff.size, CV_8U);
-    // if (mode == 0) {
-    //   cv::bitwise_and(cv::abs(diff) > zscore * std, mask, thresh);
-    // } else if (mode < 0) {
     diff *= -1;
     cv::bitwise_and(diff > zscore * std, mask, thresh);
-    // } else {
-    //   cv::bitwise_and(diff > 0.5 * zscore * std, mask, thresh);
-    // }
     // remove contour bound
     cv::erode(thresh, thresh, cv::Mat());
 
@@ -431,20 +338,10 @@ int main(int argc, char *argv[]) {
                    });
 
     // filter particle based on parameters
-    filter_particles(new_particles, {
-                                        .min_area = 5.0,
-                                        .max_area = 9999.0,
-                                        .min_aspect = 0.7,
-                                        .max_aspect = 1.0,
-                                        .min_circularity = 0.8,
-                                        .max_circularity = 1.0,
-                                        .min_convexity = 0.9,
-                                        .max_convexity = 1.0,
-                                        .min_radius = 1.0,
-                                        .max_radius = 200.0,
-                                    });
+    filter_particles(new_particles, particle_filter_args);
     // filter based on last n frames
     filter_existing_particles(particles, new_particles, particle_distance);
+    particle_count += new_particles.size();
     particles.push_back(new_particles);
 
     // create a color image and draw the contuors
@@ -483,7 +380,8 @@ int main(int argc, char *argv[]) {
       }
       particles.pop_front();
     }
-  }
+
+  } // while
 
   for (auto it = particles.begin(); it != particles.end(); ++it) {
     write_particle_data(*it, results_output);
@@ -500,7 +398,7 @@ int main(int argc, char *argv[]) {
   cv::Mat acc_var_out;
   acc_var.convertTo(acc_var_out, CV_8U);
   cv::imwrite(proc_dir / "background_var.png", acc_var);
-  std::cout << "Finished" << std::endl;
+  std::cout << "Finished" << path << std::endl;
 
   return 0;
 }
