@@ -29,59 +29,62 @@ auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
 class Parser {
 private:
   std::vector<std::string> args;
+  bool valid = true;
+  std::vector<std::string> help_texts;
 
 public:
   Parser(int argc, char *argv[]) {
+
     args = std::vector<std::string>(argv, argv + argc);
   }
 
   template <typename T>
-  T read(const std::string &name, const T &default_value,
-         bool required = false) {
+  T read(const std::string &name, const T &default_value, bool required = false,
+         const std::string &help = "") {
+    std::ostringstream oss;
+    oss << "--" << name;
+    if (required) {
+      oss << " (required)";
+    }
+    oss << ", " << help << ", default = " << default_value;
+    help_texts.push_back(oss.str());
+
     T value = default_value;
     for (auto it = args.begin(); it != args.end(); ++it) {
-      if ((*it).substr(2) == name) {
-        // shortcut for flags
-        if (std::is_same<T, bool>::value) {
-          return true;
+      if ((*it).substr(0, 2) == "--") {
+        if ((*it).substr(2) == "help") {
+          valid = false;
+        } else if ((*it).substr(2) == name) {
+          // shortcut for flags
+          if (std::is_same<T, bool>::value) {
+            return true;
+          }
+          ++it;
+          std::istringstream iss(*it);
+          if (!(iss >> value)) {
+            std::cerr << "unable to read '" + *it + "' into arg '" + name + "'"
+                      << std::endl;
+            valid = false;
+          };
+          return value;
         }
-        ++it;
-        std::istringstream iss(*it);
-        if (!(iss >> value)) {
-          throw std::invalid_argument("unable to read '" + *it +
-                                      "' into arg '" + name + "'");
-        };
-        return value;
       }
     }
     if (required) {
-      throw std::invalid_argument("missing argument '" + name + "'");
+      std::cerr << "missing required argument '" + name + "'" << std::endl;
+      valid = false;
     }
     return value;
   }
 
-  // template <typename T>
-  // void read(const std::string &name, T &value, bool required = true) {
-  //   for (auto it = args.begin(); it != args.end(); ++it) {
-  //     if ((*it).substr(2) == name) {
-  //       // shortcut for flags
-  //       if (std::is_same<T, bool>::value) {
-  //         value = true;
-  //         return;
-  //       }
-  //       ++it;
-  //       std::istringstream iss(*it);
-  //       if (!iss >> value) {
-  //         throw std::invalid_argument("unable to read '" + *it +
-  //                                     "' into arg '" + name + "'");
-  //       };
-  //       return;
-  //     }
-  //   }
-  //   if (required) {
-  //     throw std::invalid_argument("missing argument '" + name + "'");
-  //   }
-  // }
+  bool success() { return valid; }
+
+  friend std::ostream &operator<<(std::ostream &os, const Parser &p) {
+    for (auto it = p.help_texts.begin(); it != p.help_texts.end(); ++it) {
+      os << *it << std::endl;
+    }
+    return os;
+  }
 };
 
 std::pair<cv::Mat, cv::Mat> measure_background(cv::VideoCapture &cap,
@@ -276,7 +279,7 @@ cv::Mat gaussian_kernel(int rows, int cols, float sigma) {
 int main(int argc, char *argv[]) {
 
   if (argc < 2) {
-    std::cerr << "missing argument: lpc {VIDEO_FILE}" << std::endl;
+    std::cerr << "missing argument: lpcpp {VIDEO_FILE}" << std::endl;
     return 1;
   }
   // find and check parameters
@@ -287,11 +290,26 @@ int main(int argc, char *argv[]) {
   bool export_images = true;
 
   auto parser = Parser(argc, argv);
-  int background_frames = parser.read("background-frames", 1000);
-  int particle_frames = parser.read("particle-frames", 10);
-  double particle_distance = parser.read("particle-distance", 10.0);
-  double zscore = parser.read("zscore", 3.0);
-  bool draw_frames = parser.read("draw", false);
+  int background_frames = parser.read(
+      "background-frames", 1000, false,
+      "number of background frames used to determine initial mean and std");
+  int particle_frames =
+      parser.read("particle-frames", 10, false,
+                  "number of frames to track particles after last detection");
+  double particle_distance = parser.read("particle-distance", 10.0, false,
+                                         "minimum distance between particles");
+  double zscore =
+      parser.read("zscore", 3.0, false,
+                  "number of stddevs above the background mean for threshold");
+  bool draw_frames =
+      parser.read("draw", false, false, "show video and detections");
+
+  if (!parser.success()) {
+    std::cerr << "Usage: lpcpp FILE [options]" << std::endl;
+    std::cerr << "Options:" << std::endl;
+    std::cerr << parser;
+    return 1;
+  }
 
   // create capture and read some props
   auto cap = cv::VideoCapture(path, cv::CAP_FFMPEG);
