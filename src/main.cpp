@@ -3,7 +3,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <numeric>
 #include <opencv2/core.hpp>
 #include <opencv2/features2d.hpp>
 #include <opencv2/highgui.hpp>
@@ -394,11 +393,11 @@ int main(int argc, char *argv[]) {
 
   cv::Mat acc_out;
   acc_mean.convertTo(acc_out, CV_8U);
-  cv::imwrite(proc_dir / "background_mean.png", acc_mean);
+  cv::imwrite(proc_dir / "background_mean.png", acc_out);
   cv::Mat acc_var_out;
   acc_var.convertTo(acc_var_out, CV_8U);
-  cv::imwrite(proc_dir / "background_var.png", acc_var);
-  std::cout << "Finished" << path << std::endl;
+  cv::imwrite(proc_dir / "background_var.png", acc_var_out);
+  std::cout << "Finished " << path << std::endl;
 
   return 0;
 }
