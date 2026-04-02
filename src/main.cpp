@@ -351,10 +351,6 @@ int main(int argc, char *argv[]) {
   int particle_id = 0;
   int particle_count = 0;
 
-  // auto blur_filter =
-  // cv::cuda::createGaussianFilter(CV_32F, CV_32F, cv::Size(), 0.5, 0.5);
-  // auto blur_filter = cv::cuda::createMedianFilter(CV_32F, 3);
-
   while (frame_pos++ < nframes) {
 
     // read in a new frame
@@ -376,25 +372,17 @@ int main(int argc, char *argv[]) {
     frame.convertTo(diff, CV_32F);
     cv::cuda::subtract(diff, acc_mean, diff);
     cv::cuda::multiplyWithScalar(diff, -1, diff);
-    // diff -= acc_mean;
-    // diff *= -1;
 
-    // median blue
-    // this is slow as fuck
+    // median blur
     medianFilter3x3(diff, diff);
-    // blur_filter->apply(diff, diff);
-    cv::Mat cpu_diff(diff);
-    // cv::medianBlur(cpu_diff, cpu_diff, 3);
-    // diff.upload(cpu_diff);
 
     // sharpen
     unsharp_mask(diff, diff, 1.0);
 
     // mask differences below x std deviations
-    // cv::cuda::GpuMat thresh = cv::cuda::GpuMat(diff.rows, diff.cols, CV_8U);
-    // get std
     cv::cuda::GpuMat std;
     cv::cuda::GpuMat thresh = cv::cuda::GpuMat(frame.rows, frame.cols, CV_8U);
+
     cv::cuda::sqrt(acc_var, std);
 
     cv::cuda::multiplyWithScalar(std, zscore, std);
@@ -402,6 +390,7 @@ int main(int argc, char *argv[]) {
     cv::cuda::bitwise_and(thresh, mask, thresh);
 
     cv::Mat cpu_thresh(thresh);
+    cv::Mat cpu_diff(diff);
 
     // remove contour bound
     // cv::erode(thresh, thresh, cv::Mat());
