@@ -162,6 +162,24 @@ void read_filter_config(std::string path, filter_args &args) {
   }
 }
 
+void update_background(const cv::Mat &frame, cv::Mat &mean, cv::Mat &var,
+                       int pos) {
+  double weight = 1.0 / static_cast<double>(pos);
+
+  cv::Mat frame_var;
+  frame.convertTo(frame_var, CV_32F);
+
+  cv::addWeighted(frame_var, weight, mean, 1.0 - weight, 0.0, mean);
+  // cv::accumulateWeighted(frame, mean, weight);
+
+  cv::subtract(frame_var, mean, frame_var);
+  cv::pow(frame_var, 2.0, frame_var);
+  // cv::pow(frame_var - acc_mean, 2.0, frame_var);
+
+  cv::addWeighted(frame_var, weight, var, 1.0 - weight, 0.0, var);
+  // cv::accumulateWeighted(frame_var, var, weight);
+}
+
 int main(int argc, char *argv[]) {
 
   if (argc < 2) {
@@ -282,13 +300,7 @@ int main(int argc, char *argv[]) {
     cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
 
     // update the background accumulated mean and variance
-    cv::accumulateWeighted(frame, acc_mean,
-                           1.0 / static_cast<double>(frame_pos));
-    cv::Mat frame_var;
-    frame.convertTo(frame_var, CV_32F);
-    cv::pow(frame_var - acc_mean, 2.0, frame_var);
-    cv::accumulateWeighted(frame_var, acc_var,
-                           1.0 / static_cast<double>(frame_pos));
+    update_background(frame, acc_mean, acc_var, frame_pos);
 
     // update progress
     if (frame_pos % 100 == 0) {
@@ -333,13 +345,7 @@ int main(int argc, char *argv[]) {
     // update the background accumulated mean and variance,
     // if on an unread frame
     if (frame_pos > background_frames) {
-      cv::accumulateWeighted(frame, acc_mean,
-                             1.0 / static_cast<double>(frame_pos));
-      cv::Mat frame_var;
-      frame.convertTo(frame_var, CV_32F);
-      cv::pow(frame_var - acc_mean, 2.0, frame_var);
-      cv::accumulateWeighted(frame_var, acc_var,
-                             1.0 / static_cast<double>(frame_pos));
+      update_background(frame, acc_mean, acc_var, frame_pos);
     }
 
     // get std
