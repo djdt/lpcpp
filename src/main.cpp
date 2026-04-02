@@ -40,7 +40,7 @@ bool find_camera_roi(const cv::Mat &mean, cv::Vec3f &roi) {
 
 void write_particle_header(std::ofstream &ofs) {
   ofs << "id,frame,frame_count,area,aspect,circularity,convexity,intensity,"
-         "radius,radius_at_median,x,y"
+         "radius,x,y"
       << std::endl;
 }
 void write_particle_data(const std::vector<Particle> &particles,
@@ -50,7 +50,7 @@ void write_particle_data(const std::vector<Particle> &particles,
         << ",";
     ofs << it->area() << "," << it->aspect() << "," << it->circularity() << ",";
     ofs << it->convexity() << "," << it->intensity() << "," << it->radius()
-        << "," << it->radiusAtQuantile(0.5) << ",";
+        << ",";
     ofs << it->center().x << "," << it->center().y << std::endl;
   }
 }
