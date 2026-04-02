@@ -93,7 +93,7 @@ const double Particle::centerWeightedIntensity() const {
 }
 
 double Particle::intensity() const {
-  cv::Mat intensity;
+  cv::Mat intensity = cv::Mat::zeros(2, _image.size, CV_8U);
   _image.copyTo(intensity, imageMask());
   return cv::sum(intensity)[0];
 };
