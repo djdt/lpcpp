@@ -136,6 +136,14 @@ std::chrono::duration<double> get_remaining_time(
   return remaining;
 }
 
+void unsharp_mask(const cv::Mat &image, cv::Mat &output, double alpha = 1.0) {
+  cv::Mat sobelx, sobely, mag;
+  cv::Sobel(image, sobelx, CV_32F, 1, 0, 3);
+  cv::Sobel(image, sobely, CV_32F, 0, 1, 3);
+  cv::magnitude(sobelx, sobely, mag);
+  cv::addWeighted(image, 1.0 + alpha, mag, -alpha, 0, output);
+}
+
 void read_filter_config(std::string path, filter_args &args) {
   std::fstream ifs(path);
   std::string line;
@@ -314,14 +322,20 @@ int main(int argc, char *argv[]) {
     cv::Mat diff;
     frame.convertTo(diff, CV_32F);
     diff -= acc_mean;
+    diff *= -1;
+
+    // median blue
     cv::medianBlur(diff, diff, 3);
+
+    // sharpen
+    unsharp_mask(diff, diff, 1.0);
 
     // mask differences below x std deviations
     cv::Mat thresh = cv::Mat::zeros(2, diff.size, CV_8U);
-    diff *= -1;
     cv::bitwise_and(diff > zscore * std, mask, thresh);
+
     // remove contour bound
-    cv::erode(thresh, thresh, cv::Mat());
+    // cv::erode(thresh, thresh, cv::Mat());
 
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(thresh, contours, cv::RETR_EXTERNAL,
@@ -397,7 +411,13 @@ int main(int argc, char *argv[]) {
   cv::Mat acc_var_out;
   acc_var.convertTo(acc_var_out, CV_8U);
   cv::imwrite(proc_dir / "background_var.png", acc_var_out);
-  std::cout << "Finished " << path << std::endl;
+
+  auto total_duration = std::chrono::duration<double>(
+      start_time - std::chrono::system_clock::now());
+
+  std::cout << std::endl
+            << "Finished in " << std::format("{:%T}", total_duration)
+            << std::endl;
 
   return 0;
 }
