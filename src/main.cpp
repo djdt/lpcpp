@@ -269,18 +269,59 @@ int main(int argc, char *argv[]) {
   frame.convertTo(acc_mean, CV_32F);
   cv::Mat acc_var = cv::Mat::zeros(2, frame.size, CV_32F);
 
+  // begin by reading the required number of frames to predict the background
+  auto start_time = std::chrono::system_clock::now();
+  int frame_pos = 0;
+  while (frame_pos++ < background_frames) {
+    cap.read(frame);
+    if (frame.empty()) {
+      std::cerr << "video does not contain enough background frames, exiting"
+                << std::endl;
+      return 1;
+    }
+    cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
+
+    // update the background accumulated mean and variance
+    cv::accumulateWeighted(frame, acc_mean,
+                           1.0 / static_cast<double>(frame_pos));
+    cv::Mat frame_var;
+    frame.convertTo(frame_var, CV_32F);
+    cv::pow(frame_var - acc_mean, 2.0, frame_var);
+    cv::accumulateWeighted(frame_var, acc_var,
+                           1.0 / static_cast<double>(frame_pos));
+
+    // update progress
+    if (frame_pos % 100 == 0) {
+      double fps;
+      auto remaining =
+          get_remaining_time(start_time, frame_pos, background_frames, fps);
+
+      std::cout << "\t...processing background :: frame " << frame_pos << "/"
+                << background_frames << " @ ";
+      std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
+      std::cout << std::format("{:%T}", remaining) << " remaining.\r"
+                << std::flush;
+    }
+  }
+
+  std::cout << std::endl;
+
   if (draw_frames) {
     cv::namedWindow("frame", cv::WINDOW_NORMAL);
     cv::namedWindow("diff", cv::WINDOW_NORMAL);
   };
 
-  std::deque<std::vector<Particle>> particles;
+  // reset the video
+  cap.set(cv::CAP_PROP_POS_FRAMES, 0);
+  frame_pos = 0;
+  start_time = std::chrono::system_clock::now();
 
-  auto start_time = std::chrono::system_clock::now();
-  int frames = 1;
+  // init the particle vars
+  std::deque<std::vector<Particle>> particles;
   int particle_id = 0;
   int particle_count = 0;
-  while (true) {
+
+  while (frame_pos++ < nframes) {
 
     // read in a new frame
     cap.read(frame);
@@ -289,29 +330,16 @@ int main(int argc, char *argv[]) {
     }
     cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
 
-    // update the accumulated mean and variance
-    cv::accumulateWeighted(frame, acc_mean, 1.0 / static_cast<double>(frames));
-    cv::Mat frame_var;
-    frame.convertTo(frame_var, CV_32F);
-    cv::pow(frame_var - acc_mean, 2.0, frame_var);
-    cv::accumulateWeighted(frame_var, acc_var,
-                           1.0 / static_cast<double>(frames));
-
-    // update progress every second or so
-    if (frames % 100 == 0) {
-      double fps;
-      auto remaining = get_remaining_time(start_time, frames, nframes, fps);
-
-      std::cout << "\t...frame " << frames << "/" << nframes << " @ ";
-      std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
-      std::cout << particle_count << " particles, ";
-      std::cout << std::format("{:%T}", remaining) << " remaining.\r"
-                << std::flush;
-    }
-    frames++;
-
-    if (frames < background_frames) {
-      continue;
+    // update the background accumulated mean and variance,
+    // if on an unread frame
+    if (frame_pos > background_frames) {
+      cv::accumulateWeighted(frame, acc_mean,
+                             1.0 / static_cast<double>(frame_pos));
+      cv::Mat frame_var;
+      frame.convertTo(frame_var, CV_32F);
+      cv::pow(frame_var - acc_mean, 2.0, frame_var);
+      cv::accumulateWeighted(frame_var, acc_var,
+                             1.0 / static_cast<double>(frame_pos));
     }
 
     // get std
@@ -346,7 +374,7 @@ int main(int argc, char *argv[]) {
     std::transform(contours.begin(), contours.end(),
                    std::back_inserter(new_particles),
                    [&](const std::vector<cv::Point> &contour) {
-                     return Particle(contour, diff, frames, particle_id++,
+                     return Particle(contour, diff, frame_pos, particle_id++,
                                      particle_image_scale);
                    });
 
@@ -394,8 +422,22 @@ int main(int argc, char *argv[]) {
       particles.pop_front();
     }
 
+    // update progress
+    if (frame_pos % 100 == 0) {
+      double fps;
+      auto remaining = get_remaining_time(start_time, frame_pos, nframes, fps);
+
+      std::cout << "\t...processing :: frame " << frame_pos << "/" << nframes
+                << " @ ";
+      std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
+      std::cout << particle_count << " particles, ";
+      std::cout << std::format("{:%T}", remaining) << " remaining.\r"
+                << std::flush;
+    }
+
   } // while
 
+  // export any remaining particles
   for (auto it = particles.begin(); it != particles.end(); ++it) {
     write_particle_data(*it, results_output);
     if (export_images) {
@@ -413,7 +455,7 @@ int main(int argc, char *argv[]) {
   cv::imwrite(proc_dir / "background_var.png", acc_var_out);
 
   auto total_duration = std::chrono::duration<double>(
-      start_time - std::chrono::system_clock::now());
+      std::chrono::system_clock::now() - start_time);
 
   std::cout << std::endl
             << "Finished in " << std::format("{:%T}", total_duration)
