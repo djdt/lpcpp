@@ -172,11 +172,12 @@ void update_background(const cv::cuda::GpuMat &frame, cv::cuda::GpuMat &mean,
                        cv::cuda::GpuMat &var, int pos) {
   double weight = 1.0 / static_cast<double>(pos);
 
-  cv::cuda::addWeighted(frame, weight, mean, 1.0 - weight, 0.0, mean);
-  // cv::accumulateWeighted(frame, mean, weight);
-
   cv::cuda::GpuMat frame_var;
   frame.convertTo(frame_var, CV_32F);
+
+  cv::cuda::addWeighted(frame_var, weight, mean, 1.0 - weight, 0.0, mean);
+  // cv::accumulateWeighted(frame, mean, weight);
+
   cv::cuda::subtract(frame_var, mean, frame_var);
   cv::cuda::pow(frame_var, 2.0, frame_var);
   // cv::pow(frame_var - acc_mean, 2.0, frame_var);
@@ -367,7 +368,6 @@ int main(int argc, char *argv[]) {
     if (frame_pos > background_frames) {
       update_background(frame, acc_mean, acc_var, frame_pos);
     }
-
 
     // calculate the difference between frame and mean
     cv::cuda::GpuMat diff;
