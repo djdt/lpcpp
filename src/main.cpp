@@ -368,9 +368,6 @@ int main(int argc, char *argv[]) {
       update_background(frame, acc_mean, acc_var, frame_pos);
     }
 
-    // get std
-    cv::cuda::GpuMat std;
-    cv::cuda::sqrt(acc_var, std);
 
     // calculate the difference between frame and mean
     cv::cuda::GpuMat diff;
@@ -389,7 +386,11 @@ int main(int argc, char *argv[]) {
 
     // mask differences below x std deviations
     // cv::cuda::GpuMat thresh = cv::cuda::GpuMat(diff.rows, diff.cols, CV_8U);
+    // get std
+    cv::cuda::GpuMat std;
     cv::cuda::GpuMat thresh;
+    cv::cuda::sqrt(acc_var, std);
+
     cv::cuda::multiplyWithScalar(std, zscore, thresh);
     cv::cuda::compare(diff, thresh, thresh, cv::CMP_GT);
     cv::cuda::bitwise_and(thresh, mask, thresh);
