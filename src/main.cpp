@@ -14,6 +14,7 @@
 #include <opencv2/videoio.hpp>
 #include <string>
 
+#include "median.cuh"
 #include "parser.hpp"
 #include "particle.hpp"
 
@@ -32,7 +33,8 @@ auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
 bool find_camera_roi(const cv::Mat &mean, cv::Vec3f &roi) {
   std::vector<cv::Vec3f> circles;
   cv::HoughCircles(mean, circles, cv::HOUGH_GRADIENT, 1.0,
-                   static_cast<int>(mean.rows / 2), 50, 5, mean.rows / 4);
+                   static_cast<float>(mean.rows) / 2.f, 50, 5, mean.rows / 4,
+                   mean.rows);
 
   if (circles.size() == 0) {
     return true;
@@ -264,29 +266,28 @@ int main(int argc, char *argv[]) {
 
   // load a frame and find the ROI
   cv::Mat cpu_frame;
-  cv::cuda::GpuMat frame;
   cap.read(cpu_frame);
-  frame.upload(cpu_frame);
-  cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
+  cv::cvtColor(cpu_frame, cpu_frame, cv::COLOR_BGR2GRAY);
+  cv::cuda::GpuMat frame(cpu_frame);
 
   std::cout << "Processsing " << path << std::endl;
   std::cout << "\tframes = " << nframes << std::endl;
   std::cout << "\tsize = " << width << " x " << height << std::endl;
 
   cv::Vec3f roi;
-  // if (find_camera_roi(frame, roi)) {
-  //   std::cerr << "\tcould not detect frame ROI, exiting" << std::endl;
-  //   return 1;
-  // } else {
-  //   std::cout << "\tROI detected at " << roi[0] << " x " << roi[1]
-  //             << " with radius " << roi[2] << std::endl;
-  //   //
-  //   // cv::Mat roi_frame;
-  //   // cv::cvtColor(frame, roi_frame, cv::COLOR_GRAY2BGR);
-  //   // cv::circle(roi_frame, cv::Point(roi[0], roi[1]), roi[2],
-  //   //            cv::Scalar(0, 0, 255), 1);
-  //   // cv::imwrite(proc_dir / "roi.png", roi_frame);
-  // }
+  if (find_camera_roi(cpu_frame, roi)) {
+    std::cerr << "\tcould not detect frame ROI, exiting" << std::endl;
+    return 1;
+  } else {
+    std::cout << "\tROI detected at " << roi[0] << " x " << roi[1]
+              << " with radius " << roi[2] << std::endl;
+    //
+    // cv::Mat roi_frame;
+    // cv::cvtColor(frame, roi_frame, cv::COLOR_GRAY2BGR);
+    // cv::circle(roi_frame, cv::Point(roi[0], roi[1]), roi[2],
+    //            cv::Scalar(0, 0, 255), 1);
+    // cv::imwrite(proc_dir / "roi.png", roi_frame);
+  }
 
   // calculate the pixel size
   double um_per_px = roi_size_um / (2.0 * roi[2]);
@@ -295,8 +296,7 @@ int main(int argc, char *argv[]) {
 
   cv::Mat cpu_mask = cv::Mat::zeros(frame.rows, frame.cols, CV_8U);
   cv::circle(cpu_mask, cv::Point(roi[0], roi[1]), roi[2] * 0.9, 255, -1);
-  cv::cuda::GpuMat mask;
-  mask.upload(cpu_mask);
+  cv::cuda::GpuMat mask(cpu_mask);
 
   // init the accumulated mean and variance
   cv::cuda::GpuMat acc_mean;
@@ -351,7 +351,9 @@ int main(int argc, char *argv[]) {
   int particle_id = 0;
   int particle_count = 0;
 
-  auto median_filter = cv::cuda::createMedianFilter(CV_32F, 3);
+  // auto blur_filter =
+  // cv::cuda::createGaussianFilter(CV_32F, CV_32F, cv::Size(), 0.5, 0.5);
+  // auto blur_filter = cv::cuda::createMedianFilter(CV_32F, 3);
 
   while (frame_pos++ < nframes) {
 
@@ -378,8 +380,12 @@ int main(int argc, char *argv[]) {
     // diff *= -1;
 
     // median blue
-    // median_filter->apply(diff, diff);
-    // cv::medianBlur(diff, diff, 3);
+    // this is slow as fuck
+    medianFilter3x3(diff, diff);
+    // blur_filter->apply(diff, diff);
+    cv::Mat cpu_diff(diff);
+    // cv::medianBlur(cpu_diff, cpu_diff, 3);
+    // diff.upload(cpu_diff);
 
     // sharpen
     unsharp_mask(diff, diff, 1.0);
@@ -388,13 +394,12 @@ int main(int argc, char *argv[]) {
     // cv::cuda::GpuMat thresh = cv::cuda::GpuMat(diff.rows, diff.cols, CV_8U);
     // get std
     cv::cuda::GpuMat std;
-    cv::cuda::GpuMat thresh;
+    cv::cuda::GpuMat thresh = cv::cuda::GpuMat(frame.rows, frame.cols, CV_8U);
     cv::cuda::sqrt(acc_var, std);
 
-    cv::cuda::multiplyWithScalar(std, zscore, thresh);
-    cv::cuda::compare(diff, thresh, thresh, cv::CMP_GT);
+    cv::cuda::multiplyWithScalar(std, zscore, std);
+    cv::cuda::compare(diff, std, thresh, cv::CMP_GT);
     cv::cuda::bitwise_and(thresh, mask, thresh);
-    thresh.convertTo(thresh, CV_8U);
 
     cv::Mat cpu_thresh(thresh);
 
@@ -407,7 +412,6 @@ int main(int argc, char *argv[]) {
 
     std::vector<Particle> new_particles;
     new_particles.reserve(contours.size());
-    cv::Mat cpu_diff(diff);
     std::transform(contours.begin(), contours.end(),
                    std::back_inserter(new_particles),
                    [&](const std::vector<cv::Point> &contour) {
@@ -424,7 +428,6 @@ int main(int argc, char *argv[]) {
 
     // create a color image and draw the contuors
     if (draw_frames) {
-      cv::cuda::cvtColor(frame, frame, cv::COLOR_GRAY2BGR);
       auto color = cv::Scalar(0, 0, 255);
       int decay = 255 / particle_frames;
       for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
@@ -432,14 +435,12 @@ int main(int argc, char *argv[]) {
         std::transform(std::execution::par, it->begin(), it->end(),
                        contours.begin(),
                        [](const Particle &p) { return p.contour(); });
-        cv::drawContours(frame, contours, -1, color, 1.0, 8);
+        cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
         color[2] -= decay;
       }
       // get the filtered contours
-      frame.download(cpu_frame);
       cv::imshow("frame", cpu_frame);
-      diff.convertTo(diff, -1, 1.0 / 255.0, 0.5);
-      diff.download(cpu_diff);
+      cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
       cv::imshow("diff", cpu_diff);
 
       int key = cv::waitKey(5000);
@@ -486,11 +487,11 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  cv::Mat acc_out;
-  acc_mean.convertTo(acc_out, CV_8U);
+  cv::Mat acc_out(acc_mean);
+  acc_out.convertTo(acc_out, CV_8U);
   cv::imwrite(proc_dir / "background_mean.png", acc_out);
-  cv::Mat acc_var_out;
-  acc_var.convertTo(acc_var_out, CV_8U);
+  cv::Mat acc_var_out(acc_var);
+  acc_var_out.convertTo(acc_var_out, CV_8U);
   cv::imwrite(proc_dir / "background_var.png", acc_var_out);
 
   auto total_duration = std::chrono::duration<double>(

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.27)
-project(lpcv)
+project(lpcpp LANGUAGES CXX CUDA)
 set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -10,11 +10,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS Yes)
 
 
 
-# file(GLOB lpcv_SRC "src/*.cpp" "include/*.hpp")
-file(GLOB lpcv_SRC "src/*.cpp" "include/*.hpp")
-add_executable(lpcv ${lpcv_SRC})
-target_include_directories(lpcv PUBLIC "${CMAKE_SOURCE_DIR}/include")
+# file(GLOB lpcpp_SRC "src/*.cpp" "include/*.hpp")
+file(GLOB lpcpp_SRC "src/*.cpp" "src/*.cu" "include/*.hpp")
+add_executable(lpcpp ${lpcpp_SRC})
+target_include_directories(lpcpp PUBLIC "${CMAKE_SOURCE_DIR}/include")
 
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
-target_link_libraries(lpcv ${OpenCV_LIBS} -ltbb -lprofiler)
+target_link_libraries(lpcpp ${OpenCV_LIBS} -ltbb -lprofiler)
