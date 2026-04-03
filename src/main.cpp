@@ -17,6 +17,8 @@
 #include "median.cuh"
 #include "parser.hpp"
 #include "particle.hpp"
+#include "tracy/Tracy.hpp"
+ZoneScoped;
 
 template <typename Iter, typename IdxIter>
 auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
@@ -44,19 +46,18 @@ bool find_camera_roi(const cv::Mat &mean, cv::Vec3f &roi) {
 }
 
 void write_particle_header(std::ofstream &ofs) {
-  ofs << "id,frame,frame_count,area,aspect,circularity,convexity,intensity,"
-         "radius,x,y"
+  ofs << "id,frame,frame_count,area_um2,aspect,circularity,convexity,intensity,"
+         "radius_um,x_pixel,y_pixel"
       << std::endl;
 }
 void write_particle_data(const std::vector<Particle> &particles,
-                         std::ofstream &ofs) {
+                         std::ofstream &ofs, double um_per_pixel) {
   for (auto it = particles.begin(); it != particles.end(); ++it) {
     ofs << it->id() << "," << it->frame_number() << "," << it->frame_count()
-        << ",";
-    ofs << it->area() << "," << it->aspect() << "," << it->circularity() << ",";
-    ofs << it->convexity() << "," << it->intensity() << "," << it->radius()
-        << ",";
-    ofs << it->center().x << "," << it->center().y << std::endl;
+        << "," << it->area() * um_per_pixel * um_per_pixel << ","
+        << it->aspect() << "," << it->circularity() << "," << it->convexity()
+        << "," << it->intensity() << "," << it->radius() * um_per_pixel << ","
+        << it->center().x << "," << it->center().y << std::endl;
   }
 }
 bool export_particle_images(const std::vector<Particle> &particles,
@@ -401,12 +402,11 @@ int main(int argc, char *argv[]) {
 
     std::vector<Particle> new_particles;
     new_particles.reserve(contours.size());
-    std::transform(contours.begin(), contours.end(),
-                   std::back_inserter(new_particles),
-                   [&](const std::vector<cv::Point> &contour) {
-                     return Particle(contour, cpu_diff, frame_pos,
-                                     particle_id++, particle_image_scale);
-                   });
+    std::transform(
+        contours.begin(), contours.end(), std::back_inserter(new_particles),
+        [&](const std::vector<cv::Point> &contour) {
+          return Particle(contour, cpu_diff, frame_pos, particle_id++);
+        });
 
     // filter particle based on parameters
     filter_particles(new_particles, particle_filter_args);
@@ -442,7 +442,7 @@ int main(int argc, char *argv[]) {
     if (particles.size() > particle_frames) {
       auto output_particles = particles.front();
 
-      write_particle_data(output_particles, results_output);
+      write_particle_data(output_particles, results_output, um_per_px);
       if (export_images) {
         if (export_particle_images(output_particles, image_dir)) {
           return 1;
@@ -468,7 +468,7 @@ int main(int argc, char *argv[]) {
 
   // export any remaining particles
   for (auto it = particles.begin(); it != particles.end(); ++it) {
-    write_particle_data(*it, results_output);
+    write_particle_data(*it, results_output, um_per_px);
     if (export_images) {
       if (export_particle_images(*it, image_dir)) {
         return 1;
