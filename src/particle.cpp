@@ -1,4 +1,5 @@
 #include "particle.hpp"
+#include "tracy/Tracy.hpp"
 
 #include <opencv2/imgcodecs.hpp>
 
@@ -7,6 +8,7 @@
 Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
                    int frame_number, int id)
     : _contour(contour), _frame(frame_number), _frame_count(1), _id(id) {
+  ZoneScoped;
 
   // moments for center and area
   _moments = cv::moments(_contour);
@@ -37,6 +39,7 @@ int Particle::id() const { return _id; }
 double Particle::area() const { return _moments.m00; };
 
 double Particle::aspect() const {
+  ZoneScoped;
   cv::RotatedRect rect = cv::minAreaRect(_contour);
   double aspect = rect.size.aspectRatio();
   if (aspect > 1.0) {
@@ -46,21 +49,25 @@ double Particle::aspect() const {
 }
 
 cv::Point2f Particle::center() const {
+  ZoneScoped;
   return cv::Point2f(_moments.m10 / _moments.m00, _moments.m01 / _moments.m00);
 }
 
 double Particle::circularity() const {
+  ZoneScoped;
   auto perim = cv::arcLength(_contour, true);
   return 4.0 * std::numbers::pi * area() / std::pow(perim, 2);
 }
 
 double Particle::convexity() const {
+  ZoneScoped;
   std::vector<cv::Point> hull;
   cv::convexHull(_contour, hull);
   return area() / cv::contourArea(hull);
 };
 
 const std::vector<cv::Point> Particle::imageContour() const {
+  ZoneScoped;
   std::vector<cv::Point> contour;
   contour.reserve(_contour.size());
   std::transform(_contour.begin(), _contour.end(), std::back_inserter(contour),
@@ -69,6 +76,7 @@ const std::vector<cv::Point> Particle::imageContour() const {
 }
 
 const double Particle::centerWeightedIntensity() const {
+  ZoneScoped;
   cv::Mat weights(_image.rows, _image.cols, CV_32F);
   cv::distanceTransform(_mask, weights, cv::DIST_L2, cv::DIST_MASK_3);
   cv::multiply(weights, _image, weights, 1.0 / cv::sum(weights)[0]);
@@ -77,12 +85,14 @@ const double Particle::centerWeightedIntensity() const {
 }
 
 double Particle::intensity() const {
+  ZoneScoped;
   cv::Mat intensity = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
   _image.copyTo(intensity, _mask);
   return cv::sum(intensity)[0];
 };
 
 double Particle::radius() const {
+  ZoneScoped;
   const cv::Point2f c = center();
   double dist = std::accumulate(
       _contour.begin(), _contour.end(), 0.0,
@@ -134,12 +144,14 @@ void Particle::addFrame() { _frame_count++; }
 
 // Comparison
 bool Particle::is_close(const Particle &b, double edge_distance) {
+  ZoneScoped;
   return cv::norm(center() - b.center()) - radius() - b.radius() <
          edge_distance;
 };
 
 void filter_particles(std::vector<Particle> &particles,
                       struct filter_args args) {
+  ZoneScoped;
   particles.erase(
       std::remove_if(
           std::execution::par, particles.begin(), particles.end(),

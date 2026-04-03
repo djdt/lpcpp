@@ -1,8 +1,11 @@
+#include <condition_variable>
 #include <deque>
 #include <execution>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iostream>
+#include <mutex>
 #include <opencv2/core.hpp>
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudafilters.hpp>
@@ -13,12 +16,12 @@
 #include <opencv2/video.hpp>
 #include <opencv2/videoio.hpp>
 #include <string>
+#include <thread>
 
 #include "median.cuh"
 #include "parser.hpp"
 #include "particle.hpp"
 #include "tracy/Tracy.hpp"
-ZoneScoped;
 
 template <typename Iter, typename IdxIter>
 auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
@@ -85,6 +88,7 @@ bool export_particle_images(const std::vector<Particle> &particles,
 void filter_existing_particles(std::deque<std::vector<Particle>> &particles,
                                std::vector<Particle> &new_particles,
                                double edge_distance = 20.0) {
+  ZoneScoped;
   /* Lookback through existing particles to find any that overlap with new
    * ones. If an overlap is found the particle with the greatest intensity is
    * kept. */
@@ -143,10 +147,10 @@ std::chrono::duration<double> get_remaining_time(
 }
 
 void unsharp_mask(const cv::cuda::GpuMat &image, cv::cuda::GpuMat &output,
+                  cv::cuda::Filter *sx, cv::cuda::Filter *sy,
                   double alpha = 1.0) {
+  ZoneScoped;
   cv::cuda::GpuMat sobelx, sobely, mag;
-  auto sx = cv::cuda::createSobelFilter(CV_32F, CV_32F, 1, 0, 3);
-  auto sy = cv::cuda::createSobelFilter(CV_32F, CV_32F, 0, 1, 3);
   sx->apply(image, sobelx);
   sy->apply(image, sobely);
   cv::cuda::magnitude(sobelx, sobely, mag);
@@ -173,21 +177,81 @@ void read_filter_config(std::string path, filter_args &args) {
 
 void update_background(const cv::cuda::GpuMat &frame, cv::cuda::GpuMat &mean,
                        cv::cuda::GpuMat &var, int pos) {
+  ZoneScoped;
   double weight = 1.0 / static_cast<double>(pos);
 
   cv::cuda::GpuMat frame_var;
   frame.convertTo(frame_var, CV_32F);
 
   cv::cuda::addWeighted(frame_var, weight, mean, 1.0 - weight, 0.0, mean);
-  // cv::accumulateWeighted(frame, mean, weight);
 
   cv::cuda::subtract(frame_var, mean, frame_var);
   cv::cuda::pow(frame_var, 2.0, frame_var);
-  // cv::pow(frame_var - acc_mean, 2.0, frame_var);
 
   cv::cuda::addWeighted(frame_var, weight, var, 1.0 - weight, 0.0, var);
-  // cv::accumulateWeighted(frame_var, var, weight);
 }
+
+class AsyncVideoCapture {
+private:
+  cv::VideoCapture cap;
+  cv::Mat frame;
+  std::thread thread;
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool frame_ready;
+  std::atomic<bool> stopped;
+
+public:
+  AsyncVideoCapture(const std::string &filename, int api)
+      : frame_ready(false), stopped(false) {
+    cap.open(filename, api);
+    // cap.read(frame);
+
+    thread = std::thread(&AsyncVideoCapture::update, this);
+  }
+
+  ~AsyncVideoCapture() {
+    stopped = true;
+    cv.notify_all();
+    if (thread.joinable())
+      thread.join();
+  }
+
+  void read(cv::Mat &output) {
+    std::unique_lock<std::mutex> lock(mutex);
+    if (frame.empty())
+      cv.wait(lock, [this] { return frame_ready || stopped; });
+
+    frame.copyTo(output);
+    frame_ready = false;
+
+    lock.unlock();
+    cv.notify_one(); // wake up thread
+  }
+
+  int width() { return cap.get(cv::CAP_PROP_FRAME_WIDTH); }
+  int height() { return cap.get(cv::CAP_PROP_FRAME_HEIGHT); }
+  int frame_count() { return cap.get(cv::CAP_PROP_FRAME_COUNT); }
+
+private:
+  void update() {
+    while (!stopped) {
+      std::unique_lock<std::mutex> lock(mutex);
+      cv.wait(lock, [this] { return !frame_ready || stopped; });
+      if (stopped)
+        break;
+      lock.unlock();
+
+      cv::Mat tmp;
+      if (cap.read(tmp)) {
+        std::lock_guard<std::mutex> lock(mutex);
+        frame = tmp;
+        frame_ready = true;
+      }
+      cv.notify_one(); // frame is ready
+    }
+  }
+};
 
 int main(int argc, char *argv[]) {
 
@@ -196,7 +260,7 @@ int main(int argc, char *argv[]) {
 
   double roi_size_um = 750.0;
   int particle_image_scale = 1;
-  bool export_images = true;
+  bool export_images = false;
 
   auto parser = ArgumentParser(argc, argv);
   int background_frames = parser.read(
@@ -240,10 +304,10 @@ int main(int argc, char *argv[]) {
   }
 
   // create capture and read some props
-  auto cap = cv::VideoCapture(path, cv::CAP_FFMPEG);
-  int width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
-  int height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
-  int nframes = cap.get(cv::CAP_PROP_FRAME_COUNT);
+  auto cap = AsyncVideoCapture(path, cv::CAP_FFMPEG);
+  int width = cap.width();
+  int height = cap.height();
+  int nframes = cap.frame_count();
 
   // auto cap = cv::cudacodec::createVideoReader(path);
   // double dwidth, dheight, dframes;
@@ -352,15 +416,26 @@ int main(int argc, char *argv[]) {
   int particle_id = 0;
   int particle_count = 0;
 
+  auto sx = cv::cuda::createSobelFilter(CV_32F, CV_32F, 1, 0, 3);
+  auto sy = cv::cuda::createSobelFilter(CV_32F, CV_32F, 0, 1, 3);
+  auto stream = cv::cuda::Stream();
+  cap.read(cpu_frame);
+  frame.upload(cpu_frame, stream);
+
+  ZoneScoped;
   while (frame_pos++ < nframes) {
 
-    // read in a new frame
-    cap.read(cpu_frame);
-    frame.upload(cpu_frame);
-    if (frame.empty()) {
-      break;
+    {
+      ZoneScopedN("Read");
+      stream.waitForCompletion();
+      cap.read(cpu_frame);
+      frame.upload(cpu_frame, stream);
+      // read in a new frame
+      if (frame.empty()) {
+        break;
+      }
+      cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
     }
-    cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
 
     // update the background accumulated mean and variance,
     // if on an unread frame
@@ -370,28 +445,38 @@ int main(int argc, char *argv[]) {
 
     // calculate the difference between frame and mean
     cv::cuda::GpuMat diff;
-    frame.convertTo(diff, CV_32F);
-    cv::cuda::subtract(diff, acc_mean, diff);
-    cv::cuda::multiplyWithScalar(diff, -1, diff);
+    {
+      ZoneScopedN("Diff");
+      frame.convertTo(diff, CV_32F);
+      cv::cuda::subtract(diff, acc_mean, diff);
+      cv::cuda::multiplyWithScalar(diff, -1, diff);
+    }
 
     // median blur
     medianFilter3x3(diff, diff);
 
     // sharpen
-    unsharp_mask(diff, diff, 1.0);
+    unsharp_mask(diff, diff, sx, sy, 1.0);
 
     // mask differences below x std deviations
     cv::cuda::GpuMat std;
     cv::cuda::GpuMat thresh = cv::cuda::GpuMat(frame.rows, frame.cols, CV_8U);
+    {
+      ZoneScopedN("StdMean");
 
-    cv::cuda::sqrt(acc_var, std);
+      cv::cuda::sqrt(acc_var, std);
 
-    cv::cuda::multiplyWithScalar(std, zscore, std);
-    cv::cuda::compare(diff, std, thresh, cv::CMP_GT);
-    cv::cuda::bitwise_and(thresh, mask, thresh);
+      cv::cuda::multiplyWithScalar(std, zscore, std);
+      cv::cuda::compare(diff, std, thresh, cv::CMP_GT);
+      cv::cuda::bitwise_and(thresh, mask, thresh);
+    }
 
-    cv::Mat cpu_thresh(thresh);
-    cv::Mat cpu_diff(diff);
+    cv::Mat cpu_thresh, cpu_diff;
+    {
+      ZoneScopedN("Download");
+      thresh.download(cpu_thresh);
+      diff.download(cpu_diff, stream);
+    }
 
     // remove contour bound
     // cv::erode(thresh, thresh, cv::Mat());
@@ -399,6 +484,8 @@ int main(int argc, char *argv[]) {
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
                      cv::CHAIN_APPROX_SIMPLE);
+
+    stream.waitForCompletion();
 
     std::vector<Particle> new_particles;
     new_particles.reserve(contours.size());
