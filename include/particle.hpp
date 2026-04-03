@@ -8,6 +8,7 @@ class Particle {
 private:
   std::vector<cv::Point> _contour;
   cv::Mat _image;
+  cv::Mat _mask;
   cv::Rect _rect;
 
   int _id;
@@ -18,7 +19,7 @@ private:
 
 public:
   Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
-           int frame_number, int id, int image_scale = 1);
+           int frame_number, int id);
 
   double area() const;
   double aspect() const;
@@ -30,12 +31,11 @@ public:
   int frame_number() const;
   int frame_count() const;
   const cv::Mat &image() const;
-  const cv::Mat imageMask() const;
   const std::vector<cv::Point> imageContour() const;
   double intensity() const;
   int id() const;
   double radius() const;
-  double radiusAtQuantile(const double quantile) const;
+  // double radiusAtQuantile(const double quantile) const;
   double sharpness() const;
 
   void addFrame();
