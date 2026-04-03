@@ -5,29 +5,22 @@
 #include <execution>
 
 Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
-                   int frame_number, int id, int image_scale)
+                   int frame_number, int id)
     : _contour(contour), _frame(frame_number), _frame_count(1), _id(id) {
+
   // moments for center and area
   _moments = cv::moments(_contour);
-  // cv::Point2f center =
-  //     cv::Point2f(_moments.m10 / _moments.m00, _moments.m01 / _moments.m00);
 
   _rect = cv::boundingRect(_contour);
-  _rect -= cv::Point(_rect.size()) * image_scale / 2;
-  _rect += _rect.size() * image_scale;
+
+  _rect -= cv::Point(_rect.size()) * 0.5;
+  _rect += _rect.size();
   _rect &= cv::Rect(0, 0, frame.cols, frame.rows);
 
   _image = frame(_rect).clone();
-
-  // search again at a percentile
-  double max;
-  cv::minMaxIdx(_image, nullptr, &max);
-
-  // mask off invalid pixels
-  // std::vector<std::vector<cv::Point>> c = {_contour};
-  // cv::Mat mask = cv::Mat::ones(2, _image.size, CV_8U);
-  // cv::drawContours(mask, c, 0, 0, -1, cv::LINE_8, cv::noArray(), 1,
-  // -_rect.tl()); _image.setTo(255, mask);
+  _mask = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
+  cv::drawContours(_mask, {_contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
+                   -_rect.tl());
 };
 
 const std::vector<cv::Point> &Particle::contour() const { return _contour; }
@@ -75,26 +68,17 @@ const std::vector<cv::Point> Particle::imageContour() const {
   return contour;
 }
 
-const cv::Mat Particle::imageMask() const {
-  cv::Mat mask = cv::Mat::zeros(2, _image.size, CV_8U);
-  std::vector<std::vector<cv::Point>> contours = {_contour};
-  cv::drawContours(mask, contours, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
-                   -_rect.tl());
-  return mask;
-}
-
 const double Particle::centerWeightedIntensity() const {
-  cv::Mat mask = imageMask();
-  cv::Mat weights(_image.size.dims(), _image.size, CV_32F);
-  cv::distanceTransform(mask, weights, cv::DIST_L2, cv::DIST_MASK_3);
+  cv::Mat weights(_image.rows, _image.cols, CV_32F);
+  cv::distanceTransform(_mask, weights, cv::DIST_L2, cv::DIST_MASK_3);
   cv::multiply(weights, _image, weights, 1.0 / cv::sum(weights)[0]);
 
   return cv::sum(weights)[0];
 }
 
 double Particle::intensity() const {
-  cv::Mat intensity = cv::Mat::zeros(2, _image.size, CV_8U);
-  _image.copyTo(intensity, imageMask());
+  cv::Mat intensity = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
+  _image.copyTo(intensity, _mask);
   return cv::sum(intensity)[0];
 };
 
@@ -106,36 +90,37 @@ double Particle::radius() const {
   return dist / _contour.size();
 }
 
-double Particle::radiusAtQuantile(const double quantile) const {
-  cv::Mat values;
-  std::vector<cv::Point> points;
-  _image.copyTo(values, imageMask());
-  cv::findNonZero(values, points);
-
-  auto loc = points.begin() + points.size() * quantile;
-  std::nth_element(points.begin(), loc, points.end(),
-                   [&](const cv::Point &a, const cv::Point &b) {
-                     return values.at<float>(a) < values.at<float>(b);
-                   });
-  auto q = values.at<float>(points[points.size() * quantile]);
-
-  cv::Mat qmask;
-  cv::threshold(values, qmask, q, 255, cv::THRESH_BINARY);
-  qmask.convertTo(qmask, CV_8U);
-
-  std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(qmask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE,
-                   _rect.tl());
-
-  if (contours.size() == 0)
-    return 0;
-
-  const cv::Point2f c = center();
-  double dist = std::accumulate(
-      contours[0].begin(), contours[0].end(), 0.0,
-      [&c](double sum, const cv::Point2f &p) { return sum + cv::norm(p - c); });
-  return dist / contours[0].size();
-}
+// double Particle::radiusAtQuantile(const double quantile) const {
+//   cv::Mat values;
+//   std::vector<cv::Point> points;
+//   _image.copyTo(values, _mask);
+//   cv::findNonZero(values, points);
+//
+//   auto loc = points.begin() + points.size() * quantile;
+//   std::nth_element(points.begin(), loc, points.end(),
+//                    [&](const cv::Point &a, const cv::Point &b) {
+//                      return values.at<float>(a) < values.at<float>(b);
+//                    });
+//   auto q = values.at<float>(points[points.size() * quantile]);
+//
+//   cv::Mat qmask;
+//   cv::threshold(values, qmask, q, 255, cv::THRESH_BINARY);
+//   qmask.convertTo(qmask, CV_8U);
+//
+//   std::vector<std::vector<cv::Point>> contours;
+//   cv::findContours(qmask, contours, cv::RETR_EXTERNAL,
+//   cv::CHAIN_APPROX_SIMPLE,
+//                    _rect.tl());
+//
+//   if (contours.size() == 0)
+//     return 0;
+//
+//   const cv::Point2f c = center();
+//   double dist = std::accumulate(
+//       contours[0].begin(), contours[0].end(), 0.0,
+//       [&c](double sum, const cv::Point2f &p) { return sum + cv::norm(p - c);
+//       });
+//   return dist / contours[0].size();
 
 double Particle::sharpness() const {
   cv::Mat laplace;
