@@ -3,10 +3,10 @@
 #include <execution>
 #include <filesystem>
 #include <fstream>
-#include <future>
 #include <iostream>
 #include <mutex>
 #include <opencv2/core.hpp>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudafilters.hpp>
 #include <opencv2/cudaimgproc.hpp>
@@ -18,6 +18,7 @@
 #include <string>
 #include <thread>
 
+#include "asynccapture.hpp"
 #include "median.cuh"
 #include "parser.hpp"
 #include "particle.hpp"
@@ -45,6 +46,30 @@ bool find_camera_roi(const cv::Mat &mean, cv::Vec3f &roi) {
     return true;
   }
   roi = circles[0];
+  return false;
+}
+
+bool mask_capillary(cv::InputArray &input, cv::Mat &mask, double &um_per_px,
+                    const double capillary_diameter = 750.0) {
+  cv::Mat frame = input.getMat();
+
+  std::vector<cv::Vec3f> circles;
+  cv::HoughCircles(frame, circles, cv::HOUGH_GRADIENT, 1.0,
+                   static_cast<float>(frame.rows) / 2.f, 50, 5, frame.rows / 4,
+                   frame.rows);
+
+  if (circles.size() == 0) {
+    std::cerr << "\tcould not detect capillary" << std::endl;
+    return true;
+  } else {
+    std::cout << "\tcapillary detected at " << circles[0][0] << " x "
+              << circles[0][1] << " with radius " << circles[0][2] << std::endl;
+  }
+
+  um_per_px = capillary_diameter / (2.0 * circles[0][2]);
+  mask = cv::Mat::zeros(frame.rows, frame.cols, CV_8U);
+  cv::circle(mask, cv::Point(circles[0][0], circles[0][1]), circles[0][2] * 0.9,
+             255, -1);
   return false;
 }
 
@@ -191,70 +216,11 @@ void update_background(const cv::cuda::GpuMat &frame, cv::cuda::GpuMat &mean,
   cv::cuda::addWeighted(frame_var, weight, var, 1.0 - weight, 0.0, var);
 }
 
-class AsyncVideoCapture {
-private:
-  cv::VideoCapture cap;
-  cv::Mat frame;
-  std::thread thread;
-  std::mutex mutex;
-  std::condition_variable cv;
-  std::atomic<bool> running;
-  bool frame_ready;
-
-public:
-  AsyncVideoCapture(const std::string &filename, int api)
-      : frame_ready(false), running(true) {
-    cap.open(filename, api);
-
-    thread = std::thread(&AsyncVideoCapture::update, this);
-  }
-
-  ~AsyncVideoCapture() {
-    running = true;
-    cv.notify_all();
-    if (thread.joinable())
-      thread.join();
-  }
-
-  void read(cv::Mat &output) {
-    std::unique_lock<std::mutex> lock(mutex);
-
-    cv.wait(lock, [this] { return frame_ready || !running.load(); });
-
-    frame.copyTo(output);
-    frame_ready = false;
-
-    lock.unlock();
-    cv.notify_one(); // wake up thread
-  }
-
-  int width() { return cap.get(cv::CAP_PROP_FRAME_WIDTH); }
-  int height() { return cap.get(cv::CAP_PROP_FRAME_HEIGHT); }
-  int frame_count() { return cap.get(cv::CAP_PROP_FRAME_COUNT); }
-
-private:
-  void update() {
-    while (running) {
-      std::unique_lock<std::mutex> lock(mutex);
-      cv.wait(lock, [this] { return !frame_ready || !running.load(); });
-      if (!running)
-        break;
-
-      cap.read(frame);
-      frame_ready = true;
-
-      lock.unlock();
-      cv.notify_one(); // frame is ready
-    }
-  }
-};
-
 int main(int argc, char *argv[]) {
 
   // find and check parameters
   std::filesystem::path path(argv[1]);
 
-  double roi_size_um = 750.0;
   int particle_image_scale = 1;
   bool export_images = false;
 
@@ -301,19 +267,10 @@ int main(int argc, char *argv[]) {
 
   // create capture and read some props
   auto cap = AsyncVideoCapture(path, cv::CAP_FFMPEG);
-  int width = cap.width();
-  int height = cap.height();
-  int nframes = cap.frame_count();
 
-  // auto cap = cv::cudacodec::createVideoReader(path);
-  // double dwidth, dheight, dframes;
-  // cap->get(cv::CAP_PROP_FRAME_WIDTH, dwidth);
-  // cap->get(cv::CAP_PROP_FRAME_HEIGHT, dheight);
-  // cap->get(cv::CAP_PROP_FRAME_COUNT, dframes);
-  //
-  // int width = static_cast<int>(dwidth);
-  // int height = static_cast<int>(dheight);
-  // int nframes = static_cast<int>(dframes);
+  int width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
+  int height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
+  int frame_count = cap.get(cv::CAP_PROP_FRAME_COUNT);
 
   // create output directory
   auto proc_dir = path.parent_path() / "processed";
@@ -332,37 +289,28 @@ int main(int argc, char *argv[]) {
   cv::cuda::GpuMat frame(cpu_frame);
 
   std::cout << "Processsing " << path << std::endl;
-  std::cout << "\tframes = " << nframes << std::endl;
-  std::cout << "\tsize = " << width << " x " << height << std::endl;
 
-  cv::Vec3f roi;
-  if (find_camera_roi(cpu_frame, roi)) {
-    std::cerr << "\tcould not detect frame ROI, exiting" << std::endl;
+  cv::Mat cpu_mask;
+  double um_per_px;
+  if (mask_capillary(cpu_frame, cpu_mask, um_per_px)) {
     return 1;
-  } else {
-    std::cout << "\tROI detected at " << roi[0] << " x " << roi[1]
-              << " with radius " << roi[2] << std::endl;
-    //
-    // cv::Mat roi_frame;
-    // cv::cvtColor(frame, roi_frame, cv::COLOR_GRAY2BGR);
-    // cv::circle(roi_frame, cv::Point(roi[0], roi[1]), roi[2],
-    //            cv::Scalar(0, 0, 255), 1);
-    // cv::imwrite(proc_dir / "roi.png", roi_frame);
   }
-
-  // calculate the pixel size
-  double um_per_px = roi_size_um / (2.0 * roi[2]);
-  std::cout << "\tpixel size = " << std::setprecision(4) << um_per_px << " µm";
-  std::cout << std::endl << std::endl;
-
-  cv::Mat cpu_mask = cv::Mat::zeros(frame.rows, frame.cols, CV_8U);
-  cv::circle(cpu_mask, cv::Point(roi[0], roi[1]), roi[2] * 0.9, 255, -1);
   cv::cuda::GpuMat mask(cpu_mask);
 
+  std::cout << "\tframes = " << frame_count << std::endl;
+  std::cout << "\tsize = " << width << " x " << height << std::endl;
+  std::cout << "\tµm per px = " << um_per_px << std::endl;
+
   // init the accumulated mean and variance
+#ifdef HAVE_CUDA
   cv::cuda::GpuMat acc_mean;
-  frame.convertTo(acc_mean, CV_32F);
   cv::cuda::GpuMat acc_var = cv::cuda::GpuMat(frame.rows, frame.cols, CV_32F);
+#else
+  cv::Mat acc_mean;
+  cv::Mat acc_var = cv::cuda::GpuMat(frame.rows, frame.cols, CV_32F);
+#endif // HAVE_CUDA
+
+  frame.convertTo(acc_mean, CV_32F);
   acc_var.setTo(0.f);
 
   // begin by reading the required number of frames to predict the background
@@ -419,7 +367,7 @@ int main(int argc, char *argv[]) {
   frame.upload(cpu_frame, stream);
 
   ZoneScoped;
-  while (frame_pos++ < nframes) {
+  while (frame_pos++ < frame_count) {
 
     {
       ZoneScopedN("Read");
@@ -537,10 +485,11 @@ int main(int argc, char *argv[]) {
     // update progress
     if (frame_pos % 100 == 0) {
       double fps;
-      auto remaining = get_remaining_time(start_time, frame_pos, nframes, fps);
+      auto remaining =
+          get_remaining_time(start_time, frame_pos, frame_count, fps);
 
-      std::cout << "\t...processing :: frame " << frame_pos << "/" << nframes
-                << " @ ";
+      std::cout << "\t...processing :: frame " << frame_pos << "/"
+                << frame_count << " @ ";
       std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
       std::cout << particle_count << " particles, ";
       std::cout << std::format("{:%T}", remaining) << " remaining.\r"
