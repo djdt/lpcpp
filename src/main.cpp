@@ -11,20 +11,9 @@
 #include <opencv2/videoio.hpp>
 #include <string>
 
+#include "io.hpp"
 #include "parser.hpp"
 #include "particle.hpp"
-
-template <typename Iter, typename IdxIter>
-auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
-                    IdxIter indices_end) -> Iter {
-
-  while (indices_end != indices_begin) {
-    --indices_end;
-    auto pos = begin + *indices_end;
-    std::move(std::next(pos), end--, pos);
-  }
-  return end;
-}
 
 bool find_camera_roi(const cv::Mat &mean, cv::Vec3f &roi) {
   std::vector<cv::Vec3f> circles;
@@ -36,92 +25,6 @@ bool find_camera_roi(const cv::Mat &mean, cv::Vec3f &roi) {
   }
   roi = circles[0];
   return false;
-}
-
-void write_particle_header(std::ofstream &ofs) {
-  ofs << "id,frame,frame_count,area,aspect,circularity,convexity,intensity,"
-         "radius,x,y"
-      << std::endl;
-}
-void write_particle_data(const std::vector<Particle> &particles,
-                         std::ofstream &ofs) {
-  for (auto it = particles.begin(); it != particles.end(); ++it) {
-    ofs << it->id() << "," << it->frame_number() << "," << it->frame_count()
-        << ",";
-    ofs << it->area() << "," << it->aspect() << "," << it->circularity() << ",";
-    ofs << it->convexity() << "," << it->intensity() << "," << it->radius()
-        << ",";
-    ofs << it->center().x << "," << it->center().y << std::endl;
-  }
-}
-bool export_particle_images(const std::vector<Particle> &particles,
-                            const std::filesystem::path &output_dir) {
-  auto color = cv::Scalar(0, 0, 255);
-  for (auto it = particles.begin(); it != particles.end(); ++it) {
-    auto out = output_dir / std::to_string(it->id()).append(".png");
-    cv::Mat image;
-    it->image().convertTo(image, CV_8U);
-    cv::Mat rgb = cv::Mat::zeros(image.rows, image.cols, CV_8UC3);
-    cv::insertChannel(image, rgb, 1);
-
-    cv::Mat fill = cv::Mat::zeros(image.rows, image.cols, CV_8U);
-    // cv::polylines(rgb, it->imageContour(), -1, color, 1.0, 8);
-    cv::fillPoly(fill, it->imageContour(), 255);
-    cv::insertChannel(fill, rgb, 2);
-    if (not cv::imwrite(out, rgb)) {
-      std::cerr << "failed to save " << out << std::endl;
-      return true;
-    }
-  }
-  return false;
-}
-
-void filter_existing_particles(std::deque<std::vector<Particle>> &particles,
-                               std::vector<Particle> &new_particles,
-                               double edge_distance = 20.0) {
-  /* Lookback through existing particles to find any that overlap with new
-   * ones. If an overlap is found the particle with the greatest intensity is
-   * kept. */
-  for (auto it_old = particles.begin(); it_old != particles.end(); ++it_old) {
-    std::vector<size_t> remove_new_at;
-    it_old->erase(
-        std::remove_if(std::execution::seq, it_old->begin(), it_old->end(),
-                       [&](Particle &old) {
-                         for (auto it_new = new_particles.begin();
-                              it_new != new_particles.end(); ++it_new) {
-                           if (it_new->is_close(old, edge_distance)) {
-                             auto norm_new = it_new->centerWeightedIntensity();
-                             auto norm_old = old.centerWeightedIntensity();
-                             if (norm_new > norm_old) {
-                               it_new->addFrame();
-                               return true; // old is removed
-                             } else {
-                               // remove new
-                               size_t idx =
-                                   std::distance(new_particles.begin(), it_new);
-                               if (remove_new_at.size() == 0 or
-                                   remove_new_at.back() != idx) {
-                                 remove_new_at.push_back(idx);
-                               }
-                               old.addFrame();
-                               return false;
-                             }
-                           }
-                         }
-                         return false;
-                       }),
-        it_old->end());
-
-    // sort and remove non-unqiue indicies
-    std::sort(remove_new_at.begin(), remove_new_at.end());
-    auto last = std::unique(remove_new_at.begin(), remove_new_at.end());
-    remove_new_at.erase(last, remove_new_at.end());
-
-    new_particles.erase(
-        remove_indices(new_particles.begin(), new_particles.end(),
-                       remove_new_at.begin(), remove_new_at.end()),
-        new_particles.end());
-  }
 }
 
 std::chrono::duration<double> get_remaining_time(
@@ -380,14 +283,20 @@ int main(int argc, char *argv[]) {
     std::transform(contours.begin(), contours.end(),
                    std::back_inserter(new_particles),
                    [&](const std::vector<cv::Point> &contour) {
-                     return Particle(contour, diff, frame_pos, particle_id++,
-                                     particle_image_scale);
+                     return Particle(contour, diff, frame_pos, particle_id++);
                    });
 
     // filter particle based on parameters
     filter_particles(new_particles, particle_filter_args);
     // filter based on last n frames
-    filter_existing_particles(particles, new_particles, particle_distance);
+    for (auto old_it = particles.begin(); old_it != particles.end(); ++old_it) {
+      filter_existing_particles(
+          *old_it, new_particles,
+          [](const Particle &a, const Particle &b) {
+            return a.centerWeightedIntensity() < b.centerWeightedIntensity();
+          },
+          particle_distance);
+    }
     particle_count += new_particles.size();
     particles.push_back(new_particles);
 

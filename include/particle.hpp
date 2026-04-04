@@ -2,6 +2,8 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+
+#include <deque>
 #include <vector>
 
 class Particle {
@@ -57,6 +59,23 @@ struct filter_args {
   double max_intensity = 0.0;
 };
 
+template <typename Iter, typename IdxIter>
+auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
+                    IdxIter indices_end) -> Iter {
+
+  while (indices_end != indices_begin) {
+    --indices_end;
+    auto pos = begin + *indices_end;
+    std::move(std::next(pos), end--, pos);
+  }
+  return end;
+}
+
 /* Filters particles by proterty, removing failing from the vector.
  * To enabled a filter pass different min and max values. */
 void filter_particles(std::vector<Particle> &particles, struct filter_args);
+
+void filter_existing_particles(
+    std::vector<Particle> &old_particles, std::vector<Particle> &new_particles,
+    const std::function<bool(const Particle &, const Particle &)> comparision,
+    const double edge_distance = 20.0);
