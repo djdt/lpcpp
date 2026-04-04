@@ -198,20 +198,19 @@ private:
   std::thread thread;
   std::mutex mutex;
   std::condition_variable cv;
+  std::atomic<bool> running;
   bool frame_ready;
-  std::atomic<bool> stopped;
 
 public:
   AsyncVideoCapture(const std::string &filename, int api)
-      : frame_ready(false), stopped(false) {
+      : frame_ready(false), running(true) {
     cap.open(filename, api);
-    // cap.read(frame);
 
     thread = std::thread(&AsyncVideoCapture::update, this);
   }
 
   ~AsyncVideoCapture() {
-    stopped = true;
+    running = true;
     cv.notify_all();
     if (thread.joinable())
       thread.join();
@@ -219,8 +218,8 @@ public:
 
   void read(cv::Mat &output) {
     std::unique_lock<std::mutex> lock(mutex);
-    if (frame.empty())
-      cv.wait(lock, [this] { return frame_ready || stopped; });
+
+    cv.wait(lock, [this] { return frame_ready || !running.load(); });
 
     frame.copyTo(output);
     frame_ready = false;
@@ -235,19 +234,16 @@ public:
 
 private:
   void update() {
-    while (!stopped) {
+    while (running) {
       std::unique_lock<std::mutex> lock(mutex);
-      cv.wait(lock, [this] { return !frame_ready || stopped; });
-      if (stopped)
+      cv.wait(lock, [this] { return !frame_ready || !running.load(); });
+      if (!running)
         break;
-      lock.unlock();
 
-      cv::Mat tmp;
-      if (cap.read(tmp)) {
-        std::lock_guard<std::mutex> lock(mutex);
-        frame = tmp;
-        frame_ready = true;
-      }
+      cap.read(frame);
+      frame_ready = true;
+
+      lock.unlock();
       cv.notify_one(); // frame is ready
     }
   }
