@@ -1,12 +1,11 @@
 #include <opencv2/core.hpp>
-#include <opencv2/cudafilters.hpp>
 
 #include "asynccapture.hpp"
 #include "particle.hpp"
 
 void unsharp_mask(const cv::cuda::GpuMat &image, cv::cuda::GpuMat &output,
-                  cv::cuda::Filter *sx, cv::cuda::Filter *sy,
-                  double alpha = 1.0);
+                  double alpha);
+
 void update_background(const cv::cuda::GpuMat &frame, cv::cuda::GpuMat &mean,
                        cv::cuda::GpuMat &var, int pos);
 

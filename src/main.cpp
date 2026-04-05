@@ -1,5 +1,4 @@
 #include <deque>
-#include <execution>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -16,15 +15,12 @@
 #include <string>
 
 #include "asynccapture.hpp"
-#include "median.cuh"
 #include "parser.hpp"
 #include "particle.hpp"
 
 #include "cpuproc.hpp"
-#include "util.hpp"
-#ifdef HAVE_OPENCV_CUDAIMGPROC
 #include "gpuproc.hpp"
-#endif // HAVE_OPENCV_CUDAIMGPROC
+#include "util.hpp"
 
 void write_particle_header(std::ofstream &ofs) {
   ofs << "id,frame,frame_count,area,aspect,circularity,convexity,intensity,"
@@ -164,19 +160,17 @@ int main(int argc, char *argv[]) {
   std::cout << "\tµm per px = " << um_per_px << std::endl;
 
   // setup arrays
-#ifdef HAVE_OPENCV_CUDAIMGPROC
   cv::cuda::GpuMat frame(cpu_frame);
   cv::cuda::GpuMat mask(cpu_mask);
   cv::cuda::GpuMat acc_mean;
   cv::cuda::GpuMat acc_var =
       cv::cuda::GpuMat(cpu_frame.rows, cpu_frame.cols, CV_32F);
   auto stream = cv::cuda::Stream();
-#else
-  cv::Mat frame(cpu_frame);
-  cv::Mat mask(cpu_mask);
-  cv::Mat acc_mean;
-  cv::Mat acc_var = cv::Mat(frame.rows, frame.cols, CV_32F);
-#endif // HAVE_CUDA
+
+  // cv::Mat frame(cpu_frame);
+  // cv::Mat mask(cpu_mask);
+  // cv::Mat acc_mean;
+  // cv::Mat acc_var = cv::Mat(frame.rows, frame.cols, CV_32F);
 
   // init the accumulated mean and variance
   frame.convertTo(acc_mean, CV_32F);
@@ -202,21 +196,15 @@ int main(int argc, char *argv[]) {
   int particle_count = 0;
 
   cap.read(cpu_frame);
-#ifdef HAVE_OPENCV_CUDAIMGPROC
   frame.upload(cpu_frame, stream);
-#endif // HAVE_OPENCV_CUDAIMGPROC
 
   while (frame_pos++ < frame_count) {
-#ifdef HAVE_OPENCV_CUDAIMGPROC
     stream.waitForCompletion();
-#endif // HAVE_OPENCV_CUDAIMGPROC
 
     cap.read(cpu_frame);
-#ifdef HAVE_OPENCV_CUDAIMGPROC
     frame.upload(cpu_frame, stream);
-#endif // HAVE_OPENCV_CUDAIMGPROC
     // read in a new frame
-    if (frame.empty()) {
+    if (cpu_frame.empty()) {
       break;
     }
     cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);

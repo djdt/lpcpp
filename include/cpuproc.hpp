@@ -7,7 +7,7 @@ bool mask_capillary(cv::InputArray &input, cv::Mat &mask, double &um_per_px,
                     const double capillary_diameter = 750.0);
 
 void unsharp_mask(const cv::cuda::GpuMat &image, cv::cuda::GpuMat &output,
-                  double alpha = 1.0);
+                  double alpha);
 
 void update_background(const cv::Mat &frame, cv::Mat &mean, cv::Mat &var,
                        int pos);

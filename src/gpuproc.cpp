@@ -5,6 +5,7 @@
 
 #include "asynccapture.hpp"
 #include "median.cuh"
+#include "particle.hpp"
 #include "util.hpp"
 
 auto sobelx = cv::cuda::createSobelFilter(CV_32F, CV_32F, 1, 0, 3);
@@ -83,12 +84,14 @@ bool init_background(AsyncVideoCapture &cap, cv::cuda::GpuMat &mean,
   return false;
 }
 
-void find_particles(const cv::cuda::GpuMat &frame,
-                            const cv::cuda::GpuMat &mean,
-                            const cv::cuda::GpuMat &var, const double zscore,
-                            std::vector<std::vector<cv::Point>> contours,
-                            cv::cuda::GpuMat &diff) {
+void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
+                    const cv::cuda::GpuMat &var, const double zscore,
+                    const cv::cuda::GpuMat &mask,
+                    std::vector<Particle> &particles, const int current_frame,
+                    int current_id) {
+
   // calculate the difference between frame and mean
+  cv::cuda::GpuMat diff;
   frame.convertTo(diff, CV_32F);
   cv::cuda::subtract(diff, mean, diff);
   cv::cuda::multiplyWithScalar(diff, -1, diff);
@@ -107,9 +110,19 @@ void find_particles(const cv::cuda::GpuMat &frame,
   cv::cuda::GpuMat thresh = cv::cuda::GpuMat(frame.rows, frame.cols, CV_8U);
   cv::cuda::compare(diff, std, thresh, cv::CMP_GT);
 
-  cv::Mat cpu_thresh;
+  cv::Mat cpu_thresh, cpu_diff;
   thresh.download(cpu_thresh);
 
+  std::vector<std::vector<cv::Point>> contours;
   cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
+
+  diff.download(cpu_diff);
+
+  particles.reserve(contours.size());
+  std::transform(
+      contours.begin(), contours.end(), std::back_inserter(particles),
+      [&](const std::vector<cv::Point> &contour) {
+        return Particle(contour, cpu_diff, current_frame, current_id++);
+      });
 }
