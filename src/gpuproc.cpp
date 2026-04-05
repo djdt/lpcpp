@@ -83,7 +83,7 @@ bool init_background(AsyncVideoCapture &cap, cv::cuda::GpuMat &mean,
   return false;
 }
 
-void find_particle_contours(const cv::cuda::GpuMat &frame,
+void find_particles(const cv::cuda::GpuMat &frame,
                             const cv::cuda::GpuMat &mean,
                             const cv::cuda::GpuMat &var, const double zscore,
                             std::vector<std::vector<cv::Point>> contours,

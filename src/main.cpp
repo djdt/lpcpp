@@ -227,24 +227,9 @@ int main(int argc, char *argv[]) {
       update_background(frame, acc_mean, acc_var, frame_pos);
     }
 
-    cv::cuda::GpuMat diff;
-    std::vector<std::vector<cv::Point>> contours;
-    find_particle_contours(frame, acc_mean, acc_var, zscore, contours, diff);
-
-    cv::Mat cpu_diff;
-#ifdef HAVE_OPENCV_CUDAIMGPROC
-    diff.download(cpu_diff);
-#else
-    cpu_diff = diff;
-#endif // HAVE_OPENCV_CUDAIMGPROC
-
     std::vector<Particle> new_particles;
-    new_particles.reserve(contours.size());
-    std::transform(
-        contours.begin(), contours.end(), std::back_inserter(new_particles),
-        [&](const std::vector<cv::Point> &contour) {
-          return Particle(contour, cpu_diff, frame_pos, particle_id++);
-        });
+    find_particles(frame, acc_mean, acc_var, zscore, mask, new_particles,
+                   frame_pos, particle_id);
 
     // filter particle based on parameters
     filter_particles(new_particles, particle_filter_args);
@@ -261,27 +246,27 @@ int main(int argc, char *argv[]) {
     particles.push_back(new_particles);
 
     // create a color image and draw the contuors
-    if (draw_frames) {
-      auto color = cv::Scalar(0, 0, 255);
-      int decay = 255 / particle_frames;
-      for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
-        contours.resize(it->size());
-        std::transform(std::execution::par, it->begin(), it->end(),
-                       contours.begin(),
-                       [](const Particle &p) { return p.contour(); });
-        cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
-        color[2] -= decay;
-      }
-      // get the filtered contours
-      cv::imshow("frame", cpu_frame);
-      cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
-      cv::imshow("diff", cpu_diff);
-
-      int key = cv::waitKey(5000);
-      if (key == 'q') {
-        break;
-      }
-    }
+    // if (draw_frames) {
+    //   auto color = cv::Scalar(0, 0, 255);
+    //   int decay = 255 / particle_frames;
+    //   for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
+    //     contours.resize(it->size());
+    //     std::transform(std::execution::par, it->begin(), it->end(),
+    //                    contours.begin(),
+    //                    [](const Particle &p) { return p.contour(); });
+    //     cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
+    //     color[2] -= decay;
+    //   }
+    //   // get the filtered contours
+    //   cv::imshow("frame", cpu_frame);
+    //   cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
+    //   cv::imshow("diff", cpu_diff);
+    //
+    //   int key = cv::waitKey(5000);
+    //   if (key == 'q') {
+    //     break;
+    //   }
+    // }
 
     // output the particles
     if (particles.size() > particle_frames) {

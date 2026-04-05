@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 
 #include "asynccapture.hpp"
+#include "particle.hpp"
 #include "util.hpp"
 
 bool mask_capillary(cv::InputArray &input, cv::Mat &mask, double &um_per_px,
@@ -91,12 +93,13 @@ bool init_background(AsyncVideoCapture &cap, cv::Mat &mean, cv::Mat &var,
   return false;
 }
 
-void find_particle_contours(const cv::Mat &frame, const cv::Mat &mean,
-                            const cv::Mat &var, const double zscore,
-                            std::vector<std::vector<cv::Point>> contours,
-                            cv::Mat &diff) {
+void find_particles(const cv::Mat &frame, const cv::Mat &mean,
+                    const cv::Mat &var, const double zscore,
+                    const cv::Mat &mask, std::vector<Particle> &particles,
+                    const int current_frame, int current_id) {
 
   // calculate the difference between frame and mean
+  cv::Mat diff;
   frame.convertTo(diff, CV_32F);
   cv::subtract(diff, mean, diff);
   diff *= -1.f;
@@ -115,6 +118,16 @@ void find_particle_contours(const cv::Mat &frame, const cv::Mat &mean,
   cv::Mat thresh = cv::Mat(frame.rows, frame.cols, CV_8U);
   cv::compare(diff, std, thresh, cv::CMP_GT);
 
+  cv::bitwise_and(diff > zscore * std, mask, thresh);
+
+  std::vector<std::vector<cv::Point>> contours;
   cv::findContours(thresh, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
+
+  particles.reserve(contours.size());
+  std::transform(contours.begin(), contours.end(),
+                 std::back_inserter(particles),
+                 [&](const std::vector<cv::Point> &contour) {
+                   return Particle(contour, diff, current_frame, current_id++);
+                 });
 }
