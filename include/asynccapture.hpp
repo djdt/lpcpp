@@ -24,6 +24,8 @@ public:
   int get(const int prop);
   void set(const int prop, const double value);
 
+  void invalidate();
+
 private:
   void update();
 };

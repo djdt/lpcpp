@@ -40,6 +40,8 @@ void AsyncVideoCapture::set(const int prop, const double value) {
   cap.set(prop, value);
 }
 
+void AsyncVideoCapture::invalidate() { frame_ready = false; }
+
 void AsyncVideoCapture::update() {
   while (running) {
     std::unique_lock<std::mutex> lock(mutex);
