@@ -90,38 +90,6 @@ double Particle::radius() const {
   return dist / _contour.size();
 }
 
-// double Particle::radiusAtQuantile(const double quantile) const {
-//   cv::Mat values;
-//   std::vector<cv::Point> points;
-//   _image.copyTo(values, _mask);
-//   cv::findNonZero(values, points);
-//
-//   auto loc = points.begin() + points.size() * quantile;
-//   std::nth_element(points.begin(), loc, points.end(),
-//                    [&](const cv::Point &a, const cv::Point &b) {
-//                      return values.at<float>(a) < values.at<float>(b);
-//                    });
-//   auto q = values.at<float>(points[points.size() * quantile]);
-//
-//   cv::Mat qmask;
-//   cv::threshold(values, qmask, q, 255, cv::THRESH_BINARY);
-//   qmask.convertTo(qmask, CV_8U);
-//
-//   std::vector<std::vector<cv::Point>> contours;
-//   cv::findContours(qmask, contours, cv::RETR_EXTERNAL,
-//   cv::CHAIN_APPROX_SIMPLE,
-//                    _rect.tl());
-//
-//   if (contours.size() == 0)
-//     return 0;
-//
-//   const cv::Point2f c = center();
-//   double dist = std::accumulate(
-//       contours[0].begin(), contours[0].end(), 0.0,
-//       [&c](double sum, const cv::Point2f &p) { return sum + cv::norm(p - c);
-//       });
-//   return dist / contours[0].size();
-
 double Particle::sharpness() const {
   cv::Mat laplace;
   cv::Laplacian(_image, laplace, CV_32F);
