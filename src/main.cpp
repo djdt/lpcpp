@@ -1,10 +1,8 @@
-#include <condition_variable>
 #include <deque>
 #include <execution>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <mutex>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/cudaarithm.hpp>
@@ -16,13 +14,11 @@
 #include <opencv2/video.hpp>
 #include <opencv2/videoio.hpp>
 #include <string>
-#include <thread>
 
 #include "asynccapture.hpp"
 #include "median.cuh"
 #include "parser.hpp"
 #include "particle.hpp"
-#include "tracy/Tracy.hpp"
 
 template <typename Iter, typename IdxIter>
 auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
@@ -113,7 +109,6 @@ bool export_particle_images(const std::vector<Particle> &particles,
 void filter_existing_particles(std::deque<std::vector<Particle>> &particles,
                                std::vector<Particle> &new_particles,
                                double edge_distance = 20.0) {
-  ZoneScoped;
   /* Lookback through existing particles to find any that overlap with new
    * ones. If an overlap is found the particle with the greatest intensity is
    * kept. */
@@ -174,7 +169,6 @@ std::chrono::duration<double> get_remaining_time(
 void unsharp_mask(const cv::cuda::GpuMat &image, cv::cuda::GpuMat &output,
                   cv::cuda::Filter *sx, cv::cuda::Filter *sy,
                   double alpha = 1.0) {
-  ZoneScoped;
   cv::cuda::GpuMat sobelx, sobely, mag;
   sx->apply(image, sobelx);
   sy->apply(image, sobely);
@@ -202,7 +196,6 @@ void read_filter_config(std::string path, filter_args &args) {
 
 void update_background(const cv::cuda::GpuMat &frame, cv::cuda::GpuMat &mean,
                        cv::cuda::GpuMat &var, int pos) {
-  ZoneScoped;
   double weight = 1.0 / static_cast<double>(pos);
 
   cv::cuda::GpuMat frame_var;
@@ -366,20 +359,16 @@ int main(int argc, char *argv[]) {
   cap.read(cpu_frame);
   frame.upload(cpu_frame, stream);
 
-  ZoneScoped;
   while (frame_pos++ < frame_count) {
 
-    {
-      ZoneScopedN("Read");
-      stream.waitForCompletion();
-      cap.read(cpu_frame);
-      frame.upload(cpu_frame, stream);
-      // read in a new frame
-      if (frame.empty()) {
-        break;
-      }
-      cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
+    stream.waitForCompletion();
+    cap.read(cpu_frame);
+    frame.upload(cpu_frame, stream);
+    // read in a new frame
+    if (frame.empty()) {
+      break;
     }
+    cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
 
     // update the background accumulated mean and variance,
     // if on an unread frame
@@ -389,12 +378,9 @@ int main(int argc, char *argv[]) {
 
     // calculate the difference between frame and mean
     cv::cuda::GpuMat diff;
-    {
-      ZoneScopedN("Diff");
-      frame.convertTo(diff, CV_32F);
-      cv::cuda::subtract(diff, acc_mean, diff);
-      cv::cuda::multiplyWithScalar(diff, -1, diff);
-    }
+    frame.convertTo(diff, CV_32F);
+    cv::cuda::subtract(diff, acc_mean, diff);
+    cv::cuda::multiplyWithScalar(diff, -1, diff);
 
     // median blur
     medianFilter3x3(diff, diff);
@@ -405,122 +391,116 @@ int main(int argc, char *argv[]) {
     // mask differences below x std deviations
     cv::cuda::GpuMat std;
     cv::cuda::GpuMat thresh = cv::cuda::GpuMat(frame.rows, frame.cols, CV_8U);
-    {
-      ZoneScopedN("StdMean");
 
-      cv::cuda::sqrt(acc_var, std);
+    cv::cuda::sqrt(acc_var, std);
 
-      cv::cuda::multiplyWithScalar(std, zscore, std);
-      cv::cuda::compare(diff, std, thresh, cv::CMP_GT);
-      cv::cuda::bitwise_and(thresh, mask, thresh);
+    cv::cuda::multiplyWithScalar(std, zscore, std);
+    cv::cuda::compare(diff, std, thresh, cv::CMP_GT);
+  }
+
+  cv::Mat cpu_thresh, cpu_diff;
+  thresh.download(cpu_thresh);
+  diff.download(cpu_diff, stream);
+
+  // remove contour bound
+  // cv::erode(thresh, thresh, cv::Mat());
+
+  std::vector<std::vector<cv::Point>> contours;
+  cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
+                   cv::CHAIN_APPROX_SIMPLE);
+
+  stream.waitForCompletion();
+
+  std::vector<Particle> new_particles;
+  new_particles.reserve(contours.size());
+  std::transform(contours.begin(), contours.end(),
+                 std::back_inserter(new_particles),
+                 [&](const std::vector<cv::Point> &contour) {
+                   return Particle(contour, cpu_diff, frame_pos, particle_id++);
+                 });
+
+  // filter particle based on parameters
+  filter_particles(new_particles, particle_filter_args);
+  // filter based on last n frames
+  filter_existing_particles(particles, new_particles, particle_distance);
+  particle_count += new_particles.size();
+  particles.push_back(new_particles);
+
+  // create a color image and draw the contuors
+  if (draw_frames) {
+    auto color = cv::Scalar(0, 0, 255);
+    int decay = 255 / particle_frames;
+    for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
+      contours.resize(it->size());
+      std::transform(std::execution::par, it->begin(), it->end(),
+                     contours.begin(),
+                     [](const Particle &p) { return p.contour(); });
+      cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
+      color[2] -= decay;
     }
+    // get the filtered contours
+    cv::imshow("frame", cpu_frame);
+    cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
+    cv::imshow("diff", cpu_diff);
 
-    cv::Mat cpu_thresh, cpu_diff;
-    {
-      ZoneScopedN("Download");
-      thresh.download(cpu_thresh);
-      diff.download(cpu_diff, stream);
-    }
-
-    // remove contour bound
-    // cv::erode(thresh, thresh, cv::Mat());
-
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
-                     cv::CHAIN_APPROX_SIMPLE);
-
-    stream.waitForCompletion();
-
-    std::vector<Particle> new_particles;
-    new_particles.reserve(contours.size());
-    std::transform(
-        contours.begin(), contours.end(), std::back_inserter(new_particles),
-        [&](const std::vector<cv::Point> &contour) {
-          return Particle(contour, cpu_diff, frame_pos, particle_id++);
-        });
-
-    // filter particle based on parameters
-    filter_particles(new_particles, particle_filter_args);
-    // filter based on last n frames
-    filter_existing_particles(particles, new_particles, particle_distance);
-    particle_count += new_particles.size();
-    particles.push_back(new_particles);
-
-    // create a color image and draw the contuors
-    if (draw_frames) {
-      auto color = cv::Scalar(0, 0, 255);
-      int decay = 255 / particle_frames;
-      for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
-        contours.resize(it->size());
-        std::transform(std::execution::par, it->begin(), it->end(),
-                       contours.begin(),
-                       [](const Particle &p) { return p.contour(); });
-        cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
-        color[2] -= decay;
-      }
-      // get the filtered contours
-      cv::imshow("frame", cpu_frame);
-      cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
-      cv::imshow("diff", cpu_diff);
-
-      int key = cv::waitKey(5000);
-      if (key == 'q') {
-        break;
-      }
-    }
-
-    // output the particles
-    if (particles.size() > particle_frames) {
-      auto output_particles = particles.front();
-
-      write_particle_data(output_particles, results_output, um_per_px);
-      if (export_images) {
-        if (export_particle_images(output_particles, image_dir)) {
-          return 1;
-        }
-      }
-      particles.pop_front();
-    }
-
-    // update progress
-    if (frame_pos % 100 == 0) {
-      double fps;
-      auto remaining =
-          get_remaining_time(start_time, frame_pos, frame_count, fps);
-
-      std::cout << "\t...processing :: frame " << frame_pos << "/"
-                << frame_count << " @ ";
-      std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
-      std::cout << particle_count << " particles, ";
-      std::cout << std::format("{:%T}", remaining) << " remaining.\r"
-                << std::flush;
-    }
-
-  } // while
-
-  // export any remaining particles
-  for (auto it = particles.begin(); it != particles.end(); ++it) {
-    write_particle_data(*it, results_output, um_per_px);
-    if (export_images) {
-      if (export_particle_images(*it, image_dir)) {
-        return 1;
-      }
+    int key = cv::waitKey(5000);
+    if (key == 'q') {
+      break;
     }
   }
 
-  cv::Mat acc_out(acc_mean);
-  acc_out.convertTo(acc_out, CV_8U);
-  cv::imwrite(proc_dir / "background_mean.png", acc_out);
-  cv::Mat acc_var_out(acc_var);
-  acc_var_out.convertTo(acc_var_out, CV_8U);
-  cv::imwrite(proc_dir / "background_var.png", acc_var_out);
+  // output the particles
+  if (particles.size() > particle_frames) {
+    auto output_particles = particles.front();
 
-  auto total_duration = std::chrono::duration<double>(
-      std::chrono::system_clock::now() - start_time);
+    write_particle_data(output_particles, results_output, um_per_px);
+    if (export_images) {
+      if (export_particle_images(output_particles, image_dir)) {
+        return 1;
+      }
+    }
+    particles.pop_front();
+  }
 
-  std::cout << std::endl
-            << "Finished in " << std::format("{:%T}", total_duration)
-            << std::endl;
+  // update progress
+  if (frame_pos % 100 == 0) {
+    double fps;
+    auto remaining =
+        get_remaining_time(start_time, frame_pos, frame_count, fps);
 
-  return 0;
+    std::cout << "\t...processing :: frame " << frame_pos << "/" << frame_count
+              << " @ ";
+    std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
+    std::cout << particle_count << " particles, ";
+    std::cout << std::format("{:%T}", remaining) << " remaining.\r"
+              << std::flush;
+  }
+
+} // while
+
+// export any remaining particles
+for (auto it = particles.begin(); it != particles.end(); ++it) {
+  write_particle_data(*it, results_output, um_per_px);
+  if (export_images) {
+    if (export_particle_images(*it, image_dir)) {
+      return 1;
+    }
+  }
+}
+
+cv::Mat acc_out(acc_mean);
+acc_out.convertTo(acc_out, CV_8U);
+cv::imwrite(proc_dir / "background_mean.png", acc_out);
+cv::Mat acc_var_out(acc_var);
+acc_var_out.convertTo(acc_var_out, CV_8U);
+cv::imwrite(proc_dir / "background_var.png", acc_var_out);
+
+auto total_duration = std::chrono::duration<double>(
+    std::chrono::system_clock::now() - start_time);
+
+std::cout << std::endl
+          << "Finished in " << std::format("{:%T}", total_duration)
+          << std::endl;
+
+return 0;
 }
