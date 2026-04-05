@@ -20,68 +20,25 @@
 #include "parser.hpp"
 #include "particle.hpp"
 
-template <typename Iter, typename IdxIter>
-auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
-                    IdxIter indices_end) -> Iter {
-
-  while (indices_end != indices_begin) {
-    --indices_end;
-    auto pos = begin + *indices_end;
-    std::move(std::next(pos), end--, pos);
-  }
-  return end;
-}
-
-bool find_camera_roi(const cv::Mat &mean, cv::Vec3f &roi) {
-  std::vector<cv::Vec3f> circles;
-  cv::HoughCircles(mean, circles, cv::HOUGH_GRADIENT, 1.0,
-                   static_cast<float>(mean.rows) / 2.f, 50, 5, mean.rows / 4,
-                   mean.rows);
-
-  if (circles.size() == 0) {
-    return true;
-  }
-  roi = circles[0];
-  return false;
-}
-
-bool mask_capillary(cv::InputArray &input, cv::Mat &mask, double &um_per_px,
-                    const double capillary_diameter = 750.0) {
-  cv::Mat frame = input.getMat();
-
-  std::vector<cv::Vec3f> circles;
-  cv::HoughCircles(frame, circles, cv::HOUGH_GRADIENT, 1.0,
-                   static_cast<float>(frame.rows) / 2.f, 50, 5, frame.rows / 4,
-                   frame.rows);
-
-  if (circles.size() == 0) {
-    std::cerr << "\tcould not detect capillary" << std::endl;
-    return true;
-  } else {
-    std::cout << "\tcapillary detected at " << circles[0][0] << " x "
-              << circles[0][1] << " with radius " << circles[0][2] << std::endl;
-  }
-
-  um_per_px = capillary_diameter / (2.0 * circles[0][2]);
-  mask = cv::Mat::zeros(frame.rows, frame.cols, CV_8U);
-  cv::circle(mask, cv::Point(circles[0][0], circles[0][1]), circles[0][2] * 0.9,
-             255, -1);
-  return false;
-}
+#include "cpuproc.hpp"
+#include "util.hpp"
+#ifdef HAVE_OPENCV_CUDAIMGPROC
+#include "gpuproc.hpp"
+#endif // HAVE_OPENCV_CUDAIMGPROC
 
 void write_particle_header(std::ofstream &ofs) {
-  ofs << "id,frame,frame_count,area_um2,aspect,circularity,convexity,intensity,"
-         "radius_um,x_pixel,y_pixel"
+  ofs << "id,frame,frame_count,area,aspect,circularity,convexity,intensity,"
+         "radius,x,y"
       << std::endl;
 }
 void write_particle_data(const std::vector<Particle> &particles,
                          std::ofstream &ofs, double um_per_pixel) {
   for (auto it = particles.begin(); it != particles.end(); ++it) {
     ofs << it->id() << "," << it->frame_number() << "," << it->frame_count()
-        << "," << it->area() * um_per_pixel * um_per_pixel << ","
-        << it->aspect() << "," << it->circularity() << "," << it->convexity()
-        << "," << it->intensity() << "," << it->radius() * um_per_pixel << ","
-        << it->center().x << "," << it->center().y << std::endl;
+        << "," << it->area() << "," << it->aspect() << "," << it->circularity()
+        << "," << it->convexity() << "," << it->intensity() << ","
+        << it->radius() << "," << it->center().x << "," << it->center().y
+        << std::endl;
   }
 }
 bool export_particle_images(const std::vector<Particle> &particles,
@@ -106,76 +63,6 @@ bool export_particle_images(const std::vector<Particle> &particles,
   return false;
 }
 
-void filter_existing_particles(std::deque<std::vector<Particle>> &particles,
-                               std::vector<Particle> &new_particles,
-                               double edge_distance = 20.0) {
-  /* Lookback through existing particles to find any that overlap with new
-   * ones. If an overlap is found the particle with the greatest intensity is
-   * kept. */
-  for (auto it_old = particles.begin(); it_old != particles.end(); ++it_old) {
-    std::vector<size_t> remove_new_at;
-    it_old->erase(
-        std::remove_if(std::execution::seq, it_old->begin(), it_old->end(),
-                       [&](Particle &old) {
-                         for (auto it_new = new_particles.begin();
-                              it_new != new_particles.end(); ++it_new) {
-                           if (it_new->is_close(old, edge_distance)) {
-                             auto norm_new = it_new->centerWeightedIntensity();
-                             auto norm_old = old.centerWeightedIntensity();
-                             if (norm_new > norm_old) {
-                               it_new->addFrame();
-                               return true; // old is removed
-                             } else {
-                               // remove new
-                               size_t idx =
-                                   std::distance(new_particles.begin(), it_new);
-                               if (remove_new_at.size() == 0 or
-                                   remove_new_at.back() != idx) {
-                                 remove_new_at.push_back(idx);
-                               }
-                               old.addFrame();
-                               return false;
-                             }
-                           }
-                         }
-                         return false;
-                       }),
-        it_old->end());
-
-    // sort and remove non-unqiue indicies
-    std::sort(remove_new_at.begin(), remove_new_at.end());
-    auto last = std::unique(remove_new_at.begin(), remove_new_at.end());
-    remove_new_at.erase(last, remove_new_at.end());
-
-    new_particles.erase(
-        remove_indices(new_particles.begin(), new_particles.end(),
-                       remove_new_at.begin(), remove_new_at.end()),
-        new_particles.end());
-  }
-}
-
-std::chrono::duration<double> get_remaining_time(
-    std::chrono::time_point<std::chrono::system_clock> start_time, int n,
-    int count, double &fps) {
-  auto frame_time = std::chrono::system_clock::now();
-  auto duration = std::chrono::duration<double>(frame_time - start_time);
-  std::chrono::duration remaining =
-      duration * (static_cast<double>(count) / static_cast<double>(n)) -
-      duration;
-  fps = static_cast<double>(n) / duration.count();
-  return remaining;
-}
-
-void unsharp_mask(const cv::cuda::GpuMat &image, cv::cuda::GpuMat &output,
-                  cv::cuda::Filter *sx, cv::cuda::Filter *sy,
-                  double alpha = 1.0) {
-  cv::cuda::GpuMat sobelx, sobely, mag;
-  sx->apply(image, sobelx);
-  sy->apply(image, sobely);
-  cv::cuda::magnitude(sobelx, sobely, mag);
-  cv::cuda::addWeighted(image, 1.0 + alpha, mag, -alpha, 0, output);
-}
-
 void read_filter_config(std::string path, filter_args &args) {
   std::fstream ifs(path);
   std::string line;
@@ -192,21 +79,6 @@ void read_filter_config(std::string path, filter_args &args) {
     else if (line == "radius")
       ifs >> args.min_radius >> args.max_radius;
   }
-}
-
-void update_background(const cv::cuda::GpuMat &frame, cv::cuda::GpuMat &mean,
-                       cv::cuda::GpuMat &var, int pos) {
-  double weight = 1.0 / static_cast<double>(pos);
-
-  cv::cuda::GpuMat frame_var;
-  frame.convertTo(frame_var, CV_32F);
-
-  cv::cuda::addWeighted(frame_var, weight, mean, 1.0 - weight, 0.0, mean);
-
-  cv::cuda::subtract(frame_var, mean, frame_var);
-  cv::cuda::pow(frame_var, 2.0, frame_var);
-
-  cv::cuda::addWeighted(frame_var, weight, var, 1.0 - weight, 0.0, var);
 }
 
 int main(int argc, char *argv[]) {
@@ -276,67 +148,42 @@ int main(int argc, char *argv[]) {
   write_particle_header(results_output);
 
   // load a frame and find the ROI
-  cv::Mat cpu_frame;
+  cv::Mat cpu_frame, cpu_mask;
   cap.read(cpu_frame);
   cv::cvtColor(cpu_frame, cpu_frame, cv::COLOR_BGR2GRAY);
-  cv::cuda::GpuMat frame(cpu_frame);
 
   std::cout << "Processsing " << path << std::endl;
 
-  cv::Mat cpu_mask;
   double um_per_px;
   if (mask_capillary(cpu_frame, cpu_mask, um_per_px)) {
     return 1;
   }
-  cv::cuda::GpuMat mask(cpu_mask);
 
   std::cout << "\tframes = " << frame_count << std::endl;
   std::cout << "\tsize = " << width << " x " << height << std::endl;
   std::cout << "\tµm per px = " << um_per_px << std::endl;
 
-  // init the accumulated mean and variance
-#ifdef HAVE_CUDA
+  // setup arrays
+#ifdef HAVE_OPENCV_CUDAIMGPROC
+  cv::cuda::GpuMat frame(cpu_frame);
+  cv::cuda::GpuMat mask(cpu_mask);
   cv::cuda::GpuMat acc_mean;
-  cv::cuda::GpuMat acc_var = cv::cuda::GpuMat(frame.rows, frame.cols, CV_32F);
+  cv::cuda::GpuMat acc_var =
+      cv::cuda::GpuMat(cpu_frame.rows, cpu_frame.cols, CV_32F);
+  auto stream = cv::cuda::Stream();
 #else
+  cv::Mat frame(cpu_frame);
+  cv::Mat mask(cpu_mask);
   cv::Mat acc_mean;
-  cv::Mat acc_var = cv::cuda::GpuMat(frame.rows, frame.cols, CV_32F);
+  cv::Mat acc_var = cv::Mat(frame.rows, frame.cols, CV_32F);
 #endif // HAVE_CUDA
 
+  // init the accumulated mean and variance
   frame.convertTo(acc_mean, CV_32F);
   acc_var.setTo(0.f);
 
   // begin by reading the required number of frames to predict the background
-  auto start_time = std::chrono::system_clock::now();
-  int frame_pos = 0;
-  while (frame_pos++ < background_frames) {
-    cap.read(cpu_frame);
-    frame.upload(cpu_frame);
-    if (frame.empty()) {
-      std::cerr << "video does not contain enough background frames, exiting"
-                << std::endl;
-      return 1;
-    }
-    cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
-
-    // update the background accumulated mean and variance
-    update_background(frame, acc_mean, acc_var, frame_pos);
-
-    // update progress
-    if (frame_pos % 100 == 0) {
-      double fps;
-      auto remaining =
-          get_remaining_time(start_time, frame_pos, background_frames, fps);
-
-      std::cout << "\t...processing background :: frame " << frame_pos << "/"
-                << background_frames << " @ ";
-      std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
-      std::cout << std::format("{:%T}", remaining) << " remaining.\r"
-                << std::flush;
-    }
-  }
-
-  std::cout << std::endl;
+  init_background(cap, acc_mean, acc_var, background_frames);
 
   if (draw_frames) {
     cv::namedWindow("frame", cv::WINDOW_NORMAL);
@@ -344,26 +191,30 @@ int main(int argc, char *argv[]) {
   };
 
   // reset the video
-  // cap->set(cv::CAP_PROP_POS_FRAMES, 0.0);
-  frame_pos = 0;
-  start_time = std::chrono::system_clock::now();
+  int frame_pos = 0;
+  cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
+  cap.invalidate();
+  auto start_time = std::chrono::system_clock::now();
 
   // init the particle vars
   std::deque<std::vector<Particle>> particles;
   int particle_id = 0;
   int particle_count = 0;
 
-  auto sx = cv::cuda::createSobelFilter(CV_32F, CV_32F, 1, 0, 3);
-  auto sy = cv::cuda::createSobelFilter(CV_32F, CV_32F, 0, 1, 3);
-  auto stream = cv::cuda::Stream();
   cap.read(cpu_frame);
+#ifdef HAVE_OPENCV_CUDAIMGPROC
   frame.upload(cpu_frame, stream);
+#endif // HAVE_OPENCV_CUDAIMGPROC
 
   while (frame_pos++ < frame_count) {
-
+#ifdef HAVE_OPENCV_CUDAIMGPROC
     stream.waitForCompletion();
+#endif // HAVE_OPENCV_CUDAIMGPROC
+
     cap.read(cpu_frame);
+#ifdef HAVE_OPENCV_CUDAIMGPROC
     frame.upload(cpu_frame, stream);
+#endif // HAVE_OPENCV_CUDAIMGPROC
     // read in a new frame
     if (frame.empty()) {
       break;
@@ -376,131 +227,114 @@ int main(int argc, char *argv[]) {
       update_background(frame, acc_mean, acc_var, frame_pos);
     }
 
-    // calculate the difference between frame and mean
     cv::cuda::GpuMat diff;
-    frame.convertTo(diff, CV_32F);
-    cv::cuda::subtract(diff, acc_mean, diff);
-    cv::cuda::multiplyWithScalar(diff, -1, diff);
+    std::vector<std::vector<cv::Point>> contours;
+    find_particle_contours(frame, acc_mean, acc_var, zscore, contours, diff);
 
-    // median blur
-    medianFilter3x3(diff, diff);
+    cv::Mat cpu_diff;
+#ifdef HAVE_OPENCV_CUDAIMGPROC
+    diff.download(cpu_diff);
+#else
+    cpu_diff = diff;
+#endif // HAVE_OPENCV_CUDAIMGPROC
 
-    // sharpen
-    unsharp_mask(diff, diff, sx, sy, 1.0);
+    std::vector<Particle> new_particles;
+    new_particles.reserve(contours.size());
+    std::transform(
+        contours.begin(), contours.end(), std::back_inserter(new_particles),
+        [&](const std::vector<cv::Point> &contour) {
+          return Particle(contour, cpu_diff, frame_pos, particle_id++);
+        });
 
-    // mask differences below x std deviations
-    cv::cuda::GpuMat std;
-    cv::cuda::GpuMat thresh = cv::cuda::GpuMat(frame.rows, frame.cols, CV_8U);
-
-    cv::cuda::sqrt(acc_var, std);
-
-    cv::cuda::multiplyWithScalar(std, zscore, std);
-    cv::cuda::compare(diff, std, thresh, cv::CMP_GT);
-  }
-
-  cv::Mat cpu_thresh, cpu_diff;
-  thresh.download(cpu_thresh);
-  diff.download(cpu_diff, stream);
-
-  // remove contour bound
-  // cv::erode(thresh, thresh, cv::Mat());
-
-  std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
-                   cv::CHAIN_APPROX_SIMPLE);
-
-  stream.waitForCompletion();
-
-  std::vector<Particle> new_particles;
-  new_particles.reserve(contours.size());
-  std::transform(contours.begin(), contours.end(),
-                 std::back_inserter(new_particles),
-                 [&](const std::vector<cv::Point> &contour) {
-                   return Particle(contour, cpu_diff, frame_pos, particle_id++);
-                 });
-
-  // filter particle based on parameters
-  filter_particles(new_particles, particle_filter_args);
-  // filter based on last n frames
-  filter_existing_particles(particles, new_particles, particle_distance);
-  particle_count += new_particles.size();
-  particles.push_back(new_particles);
-
-  // create a color image and draw the contuors
-  if (draw_frames) {
-    auto color = cv::Scalar(0, 0, 255);
-    int decay = 255 / particle_frames;
-    for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
-      contours.resize(it->size());
-      std::transform(std::execution::par, it->begin(), it->end(),
-                     contours.begin(),
-                     [](const Particle &p) { return p.contour(); });
-      cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
-      color[2] -= decay;
+    // filter particle based on parameters
+    filter_particles(new_particles, particle_filter_args);
+    // filter based on last n frames
+    for (auto it = particles.begin(); it != particles.end(); ++it) {
+      filter_existing_particles(
+          *it, new_particles,
+          [](const Particle &a, const Particle &b) {
+            return a.centerWeightedIntensity() <= b.centerWeightedIntensity();
+          },
+          particle_distance);
     }
-    // get the filtered contours
-    cv::imshow("frame", cpu_frame);
-    cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
-    cv::imshow("diff", cpu_diff);
+    particle_count += new_particles.size();
+    particles.push_back(new_particles);
 
-    int key = cv::waitKey(5000);
-    if (key == 'q') {
-      break;
+    // create a color image and draw the contuors
+    if (draw_frames) {
+      auto color = cv::Scalar(0, 0, 255);
+      int decay = 255 / particle_frames;
+      for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
+        contours.resize(it->size());
+        std::transform(std::execution::par, it->begin(), it->end(),
+                       contours.begin(),
+                       [](const Particle &p) { return p.contour(); });
+        cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
+        color[2] -= decay;
+      }
+      // get the filtered contours
+      cv::imshow("frame", cpu_frame);
+      cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
+      cv::imshow("diff", cpu_diff);
+
+      int key = cv::waitKey(5000);
+      if (key == 'q') {
+        break;
+      }
     }
-  }
 
-  // output the particles
-  if (particles.size() > particle_frames) {
-    auto output_particles = particles.front();
+    // output the particles
+    if (particles.size() > particle_frames) {
+      auto output_particles = particles.front();
 
-    write_particle_data(output_particles, results_output, um_per_px);
+      write_particle_data(output_particles, results_output, um_per_px);
+      if (export_images) {
+        if (export_particle_images(output_particles, image_dir)) {
+          return 1;
+        }
+      }
+      particles.pop_front();
+    }
+
+    // update progress
+    if (frame_pos % 100 == 0) {
+      double fps;
+      auto remaining =
+          get_remaining_time(start_time, frame_pos, frame_count, fps);
+
+      std::cout << "\t...processing :: frame " << frame_pos << "/"
+                << frame_count << " @ ";
+      std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
+      std::cout << particle_count << " particles, ";
+      std::cout << std::format("{:%T}", remaining) << " remaining.\r"
+                << std::flush;
+    }
+
+  } // while
+
+  // export any remaining particles
+  for (auto it = particles.begin(); it != particles.end(); ++it) {
+    write_particle_data(*it, results_output, um_per_px);
     if (export_images) {
-      if (export_particle_images(output_particles, image_dir)) {
+      if (export_particle_images(*it, image_dir)) {
         return 1;
       }
     }
-    particles.pop_front();
   }
 
-  // update progress
-  if (frame_pos % 100 == 0) {
-    double fps;
-    auto remaining =
-        get_remaining_time(start_time, frame_pos, frame_count, fps);
+  cv::Mat acc_out(acc_mean);
+  acc_out.convertTo(acc_out, CV_8U);
+  cv::imwrite(proc_dir / "background_mean.png", acc_out);
+  cv::Mat acc_var_out(acc_var);
+  acc_var_out.convertTo(acc_var_out, CV_8U);
+  cv::imwrite(proc_dir / "background_var.png", acc_var_out);
 
-    std::cout << "\t...processing :: frame " << frame_pos << "/" << frame_count
-              << " @ ";
-    std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
-    std::cout << particle_count << " particles, ";
-    std::cout << std::format("{:%T}", remaining) << " remaining.\r"
-              << std::flush;
-  }
+  auto total_duration = std::chrono::duration<double>(
+      std::chrono::system_clock::now() - start_time);
 
-} // while
+  std::cout << std::endl
+            << "Finished in " << std::format("{:%T}", total_duration)
+            << std::endl;
 
-// export any remaining particles
-for (auto it = particles.begin(); it != particles.end(); ++it) {
-  write_particle_data(*it, results_output, um_per_px);
-  if (export_images) {
-    if (export_particle_images(*it, image_dir)) {
-      return 1;
-    }
-  }
-}
-
-cv::Mat acc_out(acc_mean);
-acc_out.convertTo(acc_out, CV_8U);
-cv::imwrite(proc_dir / "background_mean.png", acc_out);
-cv::Mat acc_var_out(acc_var);
-acc_var_out.convertTo(acc_var_out, CV_8U);
-cv::imwrite(proc_dir / "background_var.png", acc_var_out);
-
-auto total_duration = std::chrono::duration<double>(
-    std::chrono::system_clock::now() - start_time);
-
-std::cout << std::endl
-          << "Finished in " << std::format("{:%T}", total_duration)
-          << std::endl;
-
-return 0;
+  return 0;
 }
