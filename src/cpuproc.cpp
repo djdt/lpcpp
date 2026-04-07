@@ -17,7 +17,6 @@ bool mask_capillary(cv::InputArray &input, cv::Mat &mask, double &um_per_px,
                    frame.rows);
 
   if (circles.size() == 0) {
-    std::cerr << "\tcould not detect capillary" << std::endl;
     return true;
   } else {
     std::cout << "\tcapillary detected at " << circles[0][0] << " x "

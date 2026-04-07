@@ -8,8 +8,6 @@
 #include "particle.hpp"
 #include "util.hpp"
 
-#include "tracy/Tracy.hpp"
-
 const auto sobelx = cv::cuda::createSobelFilter(CV_32F, CV_32F, 1, 0, 3);
 const auto sobely = cv::cuda::createSobelFilter(CV_32F, CV_32F, 0, 1, 3);
 
@@ -94,25 +92,16 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
 
   cv::Mat cpu_diff, cpu_thresh;
   cv::cuda::GpuMat diff;
-  {
-    ZoneScopedN("diff");
-    // calculate the difference between frame and mean
-    frame.convertTo(diff, CV_32F);
-    cv::cuda::subtract(diff, mean, diff);
-    cv::cuda::multiplyWithScalar(diff, -1, diff);
-  }
+  // calculate the difference between frame and mean
+  frame.convertTo(diff, CV_32F);
+  cv::cuda::subtract(diff, mean, diff);
+  cv::cuda::multiplyWithScalar(diff, -1, diff);
 
   // median blur
-  {
-    ZoneScopedN("median");
-    medianFilter3x3(diff, diff);
-  }
+  medianFilter3x3(diff, diff);
 
   // sharpen
-  {
-    ZoneScopedN("unsharp");
-    unsharp_mask(diff, diff, 1.0);
-  }
+  unsharp_mask(diff, diff, 1.0);
 
   // mask differences below x std deviations
   cv::cuda::GpuMat std;
@@ -124,26 +113,16 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
 
   cv::cuda::bitwise_and(thresh, mask, thresh);
 
-  {
-    ZoneScopedN("download");
-    thresh.download(cpu_thresh);
-    diff.download(cpu_diff);
-  }
+  thresh.download(cpu_thresh);
+  diff.download(cpu_diff);
 
   std::vector<std::vector<cv::Point>> contours;
-  {
-    ZoneScopedN("contours");
-    cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
-                     cv::CHAIN_APPROX_SIMPLE);
-  }
-  {
-    ZoneScopedN("particles");
-
-    particles.reserve(contours.size());
-    std::transform(
-        contours.begin(), contours.end(), std::back_inserter(particles),
-        [&](const std::vector<cv::Point> &contour) {
-          return Particle(contour, cpu_diff, current_frame, current_id++);
-        });
-  }
+  cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
+                   cv::CHAIN_APPROX_SIMPLE);
+  particles.reserve(contours.size());
+  std::transform(
+      contours.begin(), contours.end(), std::back_inserter(particles),
+      [&](const std::vector<cv::Point> &contour) {
+        return Particle(contour, cpu_diff, current_frame, current_id++);
+      });
 }

@@ -18,8 +18,6 @@
 #include "io.hpp"
 #include "util.hpp"
 
-#include "tracy/Tracy.hpp"
-
 int main(int argc, char *argv[]) {
 
   // find and check parameters
@@ -93,12 +91,12 @@ int main(int argc, char *argv[]) {
   // load a frame and find the ROI
   cv::Mat cpu_frame, cpu_mask;
   cap.read(cpu_frame);
-  std::cout << cpu_frame.type() << std::endl;
 
   std::cout << "Processsing " << path << std::endl;
 
   double um_per_px;
   if (mask_capillary(cpu_frame, cpu_mask, um_per_px)) {
+    std::cerr << "\tcould not detect capillary" << std::endl;
     return 1;
   }
 
@@ -140,47 +138,37 @@ int main(int argc, char *argv[]) {
   frame.upload(cpu_frame, stream);
 
   while (frame_pos++ < frame_count) {
-    {
-      ZoneScopedN("read frame");
-      stream.waitForCompletion();
+    stream.waitForCompletion();
 
-      cap.read(cpu_frame);
-      frame.upload(cpu_frame);
-      // read in a new frame
-      if (cpu_frame.empty()) {
-        break;
-      }
+    cap.read(cpu_frame);
+    frame.upload(cpu_frame);
+    // read in a new frame
+    if (cpu_frame.empty()) {
+      break;
     }
 
     // update the background accumulated mean and variance,
     // if on an unread frame
     if (frame_pos > background_frames) {
-      ZoneScopedN("update background");
       update_background(frame, acc_mean, acc_var, frame_pos);
     }
 
     std::vector<Particle> new_particles;
-    {
-      ZoneScopedN("find");
-      find_particles(frame, acc_mean, acc_var, zscore, mask, new_particles,
-                     frame_pos, particle_id);
+    find_particles(frame, acc_mean, acc_var, zscore, mask, new_particles,
+                   frame_pos, particle_id);
+    // filter particle based on parameters
+    filter_particles(new_particles, particle_filter_args);
+    // filter based on last n frames
+    for (auto it = particles.begin(); it != particles.end(); ++it) {
+      filter_existing_particles(
+          *it, new_particles,
+          [](const Particle &a, const Particle &b) {
+            return a.centerWeightedIntensity() > b.centerWeightedIntensity();
+          },
+          particle_distance);
     }
-    {
-      ZoneScopedN("filter");
-      // filter particle based on parameters
-      filter_particles(new_particles, particle_filter_args);
-      // filter based on last n frames
-      for (auto it = particles.begin(); it != particles.end(); ++it) {
-        filter_existing_particles(
-            *it, new_particles,
-            [](const Particle &a, const Particle &b) {
-              return a.centerWeightedIntensity() <= b.centerWeightedIntensity();
-            },
-            particle_distance);
-      }
-      particle_count += new_particles.size();
-      particles.push_back(new_particles);
-    }
+    particle_count += new_particles.size();
+    particles.push_back(new_particles);
 
     // create a color image and draw the contuors
     if (draw_frames) {

@@ -5,13 +5,9 @@
 #include <execution>
 #include <opencv2/imgproc.hpp>
 
-#include "tracy/Tracy.hpp"
-
 Particle::Particle(const std::vector<cv::Point> &contour, cv::InputArray &frame,
                    int frame_number, int id)
     : _contour(contour), _frame(frame_number), _frame_count(1), _id(id) {
-  ZoneScoped;
-
   // moments for center and area
   _moments = cv::moments(_contour);
 

@@ -4,8 +4,6 @@
 
 #include "asynccapture.hpp"
 
-#include "tracy/Tracy.hpp"
-
 AsyncVideoCapture::AsyncVideoCapture(const std::string &filename, int api)
     : frame_ready(false), running(true) {
   cap.open(filename, api);
@@ -25,11 +23,8 @@ void AsyncVideoCapture::read(cv::Mat &output) {
 
   cv.wait(lock, [this] { return frame_ready || !running.load(); });
 
-  {
-    ZoneScoped;
-    frame.copyTo(output);
-    frame_ready = false;
-  }
+  frame.copyTo(output);
+  frame_ready = false;
 
   lock.unlock();
   cv.notify_one(); // wake up thread
@@ -59,11 +54,8 @@ void AsyncVideoCapture::update() {
     if (!running)
       break;
 
-    {
-      ZoneScoped;
-      cap.read(frame);
-      frame_ready = true;
-    }
+    cap.read(frame);
+    frame_ready = true;
 
     lock.unlock();
     cv.notify_one(); // frame is ready
