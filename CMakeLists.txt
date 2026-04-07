@@ -22,4 +22,5 @@ target_include_directories(lpcpp PUBLIC "${CMAKE_SOURCE_DIR}/include")
 
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
+# target_link_libraries(lpcpp PUBLIC ${OpenCV_LIBS} -ltbb)
 target_link_libraries(lpcpp PUBLIC TracyClient ${OpenCV_LIBS} -ltbb)

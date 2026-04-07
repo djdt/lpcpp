@@ -1,4 +1,5 @@
 #include <deque>
+#include <execution>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -17,6 +18,8 @@
 #include "gpuproc.hpp"
 #include "io.hpp"
 #include "util.hpp"
+
+#include "tracy/Tracy.hpp"
 
 int main(int argc, char *argv[]) {
 
@@ -122,7 +125,7 @@ int main(int argc, char *argv[]) {
 
   if (draw_frames) {
     cv::namedWindow("frame", cv::WINDOW_NORMAL);
-    cv::namedWindow("diff", cv::WINDOW_NORMAL);
+    // cv::namedWindow("diff", cv::WINDOW_NORMAL);
   };
 
   // reset the video
@@ -140,62 +143,75 @@ int main(int argc, char *argv[]) {
   frame.upload(cpu_frame, stream);
 
   while (frame_pos++ < frame_count) {
-    stream.waitForCompletion();
+    {
+      ZoneScopedN("read frame");
+      stream.waitForCompletion();
 
-    cap.read(cpu_frame);
-    frame.upload(cpu_frame, stream);
-    // read in a new frame
-    if (cpu_frame.empty()) {
-      break;
+      cap.read(cpu_frame);
+      frame.upload(cpu_frame);
+      // read in a new frame
+      if (cpu_frame.empty()) {
+        break;
+      }
+      cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
     }
-    cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
 
     // update the background accumulated mean and variance,
     // if on an unread frame
     if (frame_pos > background_frames) {
+      ZoneScopedN("update background");
       update_background(frame, acc_mean, acc_var, frame_pos);
     }
 
     std::vector<Particle> new_particles;
-    find_particles(frame, acc_mean, acc_var, zscore, mask, new_particles,
-                   frame_pos, particle_id);
-
-    // filter particle based on parameters
-    filter_particles(new_particles, particle_filter_args);
-    // filter based on last n frames
-    for (auto it = particles.begin(); it != particles.end(); ++it) {
-      filter_existing_particles(
-          *it, new_particles,
-          [](const Particle &a, const Particle &b) {
-            return a.centerWeightedIntensity() <= b.centerWeightedIntensity();
-          },
-          particle_distance);
+    {
+      ZoneScopedN("find");
+      find_particles(frame, acc_mean, acc_var, zscore, mask, new_particles,
+                     frame_pos, particle_id);
     }
-    particle_count += new_particles.size();
-    particles.push_back(new_particles);
+    {
+      std::cout << "particle pre filter: " << new_particles.size() << std::endl;
+      ZoneScopedN("filter");
+      // filter particle based on parameters
+      filter_particles(new_particles, particle_filter_args);
+      std::cout << "particle mid filter: " << new_particles.size() << std::endl;
+      // filter based on last n frames
+      for (auto it = particles.begin(); it != particles.end(); ++it) {
+        filter_existing_particles(
+            *it, new_particles,
+            [](const Particle &a, const Particle &b) {
+              return a.centerWeightedIntensity() <= b.centerWeightedIntensity();
+            },
+            particle_distance);
+      }
+      std::cout << "particle post filter: " << new_particles.size() << std::endl;
+      particle_count += new_particles.size();
+      particles.push_back(new_particles);
+    }
 
     // create a color image and draw the contuors
-    // if (draw_frames) {
-    //   auto color = cv::Scalar(0, 0, 255);
-    //   int decay = 255 / particle_frames;
-    //   for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
-    //     contours.resize(it->size());
-    //     std::transform(std::execution::par, it->begin(), it->end(),
-    //                    contours.begin(),
-    //                    [](const Particle &p) { return p.contour(); });
-    //     cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
-    //     color[2] -= decay;
-    //   }
-    //   // get the filtered contours
-    //   cv::imshow("frame", cpu_frame);
-    //   cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
-    //   cv::imshow("diff", cpu_diff);
-    //
-    //   int key = cv::waitKey(5000);
-    //   if (key == 'q') {
-    //     break;
-    //   }
-    // }
+    if (draw_frames) {
+      auto color = cv::Scalar(0, 0, 255);
+      int decay = 255 / particle_frames;
+      std::vector<std::vector<cv::Point>> contours;
+      for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
+        contours.resize(it->size());
+        std::transform(std::execution::par, it->begin(), it->end(),
+                       contours.begin(),
+                       [](const Particle &p) { return p.contour(); });
+        cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
+        color[2] -= decay;
+      }
+      // get the filtered contours
+      cv::imshow("frame", cpu_frame);
+      // cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
+      // cv::imshow("diff", cpu_diff);
+
+      int key = cv::waitKey(5000);
+      if (key == 'q') {
+        break;
+      }
+    }
 
     // output the particles
     if (particles.size() > particle_frames) {

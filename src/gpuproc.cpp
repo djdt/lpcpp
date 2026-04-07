@@ -8,8 +8,10 @@
 #include "particle.hpp"
 #include "util.hpp"
 
-auto sobelx = cv::cuda::createSobelFilter(CV_32F, CV_32F, 1, 0, 3);
-auto sobely = cv::cuda::createSobelFilter(CV_32F, CV_32F, 0, 1, 3);
+#include "tracy/Tracy.hpp"
+
+const auto sobelx = cv::cuda::createSobelFilter(CV_32F, CV_32F, 1, 0, 3);
+const auto sobely = cv::cuda::createSobelFilter(CV_32F, CV_32F, 0, 1, 3);
 
 void unsharp_mask(const cv::cuda::GpuMat &image, cv::cuda::GpuMat &output,
                   double alpha = 1.0) {
@@ -30,7 +32,7 @@ void update_background(const cv::cuda::GpuMat &frame, cv::cuda::GpuMat &mean,
   cv::cuda::addWeighted(frame_var, weight, mean, 1.0 - weight, 0.0, mean);
 
   cv::cuda::subtract(frame_var, mean, frame_var);
-  cv::pow(frame_var, 2.0, frame_var);
+  cv::cuda::pow(frame_var, 2.0, frame_var);
 
   cv::cuda::addWeighted(frame_var, weight, var, 1.0 - weight, 0.0, var);
 }
@@ -90,17 +92,27 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
                     std::vector<Particle> &particles, const int current_frame,
                     int current_id) {
 
-  // calculate the difference between frame and mean
+  cv::Mat cpu_diff;
   cv::cuda::GpuMat diff;
-  frame.convertTo(diff, CV_32F);
-  cv::cuda::subtract(diff, mean, diff);
-  cv::cuda::multiplyWithScalar(diff, -1, diff);
+  {
+    ZoneScopedN("diff");
+    // calculate the difference between frame and mean
+    frame.convertTo(diff, CV_32F);
+    cv::cuda::subtract(diff, mean, diff);
+    cv::cuda::multiplyWithScalar(diff, -1, diff);
+  }
 
   // median blur
-  medianFilter3x3(diff, diff);
+  {
+    ZoneScopedN("median");
+    medianFilter3x3(diff, diff);
+  }
 
   // sharpen
-  unsharp_mask(diff, diff, 1.0);
+  {
+    ZoneScopedN("unsharp");
+    unsharp_mask(diff, diff, 1.0);
+  }
 
   // mask differences below x std deviations
   cv::cuda::GpuMat std;
@@ -110,19 +122,29 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
   cv::cuda::GpuMat thresh = cv::cuda::GpuMat(frame.rows, frame.cols, CV_8U);
   cv::cuda::compare(diff, std, thresh, cv::CMP_GT);
 
-  cv::Mat cpu_thresh, cpu_diff;
-  thresh.download(cpu_thresh);
+  cv::Mat cpu_thresh;
+  {
+    ZoneScopedN("download");
+    thresh.download(cpu_thresh);
+    diff.download(cpu_diff);
+  }
 
   std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
-                   cv::CHAIN_APPROX_SIMPLE);
+  {
+    ZoneScopedN("contours");
+    cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
+                     cv::CHAIN_APPROX_SIMPLE);
+  }
 
-  diff.download(cpu_diff);
+  {
+    ZoneScopedN("particles");
 
-  particles.reserve(contours.size());
-  std::transform(
-      contours.begin(), contours.end(), std::back_inserter(particles),
-      [&](const std::vector<cv::Point> &contour) {
-        return Particle(contour, cpu_diff, current_frame, current_id++);
-      });
+    particles.reserve(contours.size());
+    std::cout << "contours size: " << contours.size() << std::endl;
+    std::transform(
+        contours.begin(), contours.end(), std::back_inserter(particles),
+        [&](const std::vector<cv::Point> &contour) {
+          return Particle(contour, cpu_diff, current_frame, current_id++);
+        });
+  }
 }
