@@ -122,6 +122,8 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
   cv::cuda::GpuMat thresh = cv::cuda::GpuMat(frame.rows, frame.cols, CV_8U);
   cv::cuda::compare(diff, std, thresh, cv::CMP_GT);
 
+  cv::cuda::bitwise_and(thresh, mask, thresh);
+
   cv::Mat cpu_thresh;
   {
     ZoneScopedN("download");
@@ -140,7 +142,6 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
     ZoneScopedN("particles");
 
     particles.reserve(contours.size());
-    std::cout << "contours size: " << contours.size() << std::endl;
     std::transform(
         contours.begin(), contours.end(), std::back_inserter(particles),
         [&](const std::vector<cv::Point> &contour) {

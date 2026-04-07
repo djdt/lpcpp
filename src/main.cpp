@@ -170,11 +170,9 @@ int main(int argc, char *argv[]) {
                      frame_pos, particle_id);
     }
     {
-      std::cout << "particle pre filter: " << new_particles.size() << std::endl;
       ZoneScopedN("filter");
       // filter particle based on parameters
       filter_particles(new_particles, particle_filter_args);
-      std::cout << "particle mid filter: " << new_particles.size() << std::endl;
       // filter based on last n frames
       for (auto it = particles.begin(); it != particles.end(); ++it) {
         filter_existing_particles(
@@ -184,7 +182,6 @@ int main(int argc, char *argv[]) {
             },
             particle_distance);
       }
-      std::cout << "particle post filter: " << new_particles.size() << std::endl;
       particle_count += new_particles.size();
       particles.push_back(new_particles);
     }
