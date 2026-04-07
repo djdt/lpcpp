@@ -1,6 +1,6 @@
 #include <opencv2/core.hpp>
+#include <opencv2/videoio.hpp>
 
-#include "asynccapture.hpp"
 #include "particle.hpp"
 
 bool mask_capillary(cv::InputArray &input, cv::Mat &mask, double &um_per_px,
@@ -12,7 +12,7 @@ void unsharp_mask(const cv::cuda::GpuMat &image, cv::cuda::GpuMat &output,
 void update_background(const cv::Mat &frame, cv::Mat &mean, cv::Mat &var,
                        int pos);
 
-bool init_background(AsyncVideoCapture &cap, cv::Mat &mean, cv::Mat &var,
+bool init_background(cv::VideoCapture &cap, cv::Mat &mean, cv::Mat &var,
                      int frame_count);
 
 void find_particles(const cv::Mat &frame, const cv::Mat &mean,

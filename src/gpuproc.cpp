@@ -2,8 +2,8 @@
 #include <opencv2/cudaarithm.hpp>
 #include <opencv2/cudafilters.hpp>
 #include <opencv2/cudaimgproc.hpp>
+#include <opencv2/videoio.hpp>
 
-#include "asynccapture.hpp"
 #include "median.cuh"
 #include "particle.hpp"
 #include "util.hpp"
@@ -37,11 +37,11 @@ void update_background(const cv::cuda::GpuMat &frame, cv::cuda::GpuMat &mean,
   cv::cuda::addWeighted(frame_var, weight, var, 1.0 - weight, 0.0, var);
 }
 
-bool init_background(AsyncVideoCapture &cap, cv::cuda::GpuMat &mean,
+bool init_background(cv::VideoCapture &cap, cv::cuda::GpuMat &mean,
                      cv::cuda::GpuMat &var, int frame_count) {
   int frame_pos = 0;
   cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
-  cap.invalidate();
+  // cap.invalidate();
 
   cv::Mat cpu_frame;
   cv::cuda::GpuMat frame;
@@ -64,7 +64,7 @@ bool init_background(AsyncVideoCapture &cap, cv::cuda::GpuMat &mean,
                 << std::endl;
       return true;
     }
-    cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
+    // cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
 
     // update the background accumulated mean and variance
     update_background(frame, mean, var, frame_pos);

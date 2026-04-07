@@ -10,7 +10,6 @@
 #include <opencv2/imgproc.hpp>
 #include <string>
 
-#include "asynccapture.hpp"
 #include "parser.hpp"
 #include "particle.hpp"
 
@@ -71,7 +70,11 @@ int main(int argc, char *argv[]) {
   }
 
   // create capture and read some props
-  auto cap = AsyncVideoCapture(path, cv::CAP_FFMPEG);
+  auto cap = cv::VideoCapture(path, cv::CAP_FFMPEG);
+  if (!cap.set(cv::CAP_PROP_CONVERT_RGB, 0)) {
+    std::cerr << "cannot read as greyscale" << std::endl;
+    return 1;
+  }
 
   int width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
   int height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
@@ -90,7 +93,7 @@ int main(int argc, char *argv[]) {
   // load a frame and find the ROI
   cv::Mat cpu_frame, cpu_mask;
   cap.read(cpu_frame);
-  cv::cvtColor(cpu_frame, cpu_frame, cv::COLOR_BGR2GRAY);
+  std::cout << cpu_frame.type() << std::endl;
 
   std::cout << "Processsing " << path << std::endl;
 
@@ -126,7 +129,6 @@ int main(int argc, char *argv[]) {
   // reset the video
   int frame_pos = 0;
   cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
-  cap.invalidate();
   auto start_time = std::chrono::system_clock::now();
 
   // init the particle vars
@@ -148,7 +150,6 @@ int main(int argc, char *argv[]) {
       if (cpu_frame.empty()) {
         break;
       }
-      cv::cuda::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
     }
 
     // update the background accumulated mean and variance,

@@ -2,8 +2,8 @@
 #include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/videoio.hpp>
 
-#include "asynccapture.hpp"
 #include "particle.hpp"
 #include "util.hpp"
 
@@ -54,11 +54,10 @@ void update_background(const cv::Mat &frame, cv::Mat &mean, cv::Mat &var,
   cv::addWeighted(frame_var, weight, var, 1.0 - weight, 0.0, var);
 }
 
-bool init_background(AsyncVideoCapture &cap, cv::Mat &mean, cv::Mat &var,
+bool init_background(cv::VideoCapture &cap, cv::Mat &mean, cv::Mat &var,
                      int frame_count) {
   int frame_pos = 0;
   cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
-  cap.invalidate();
 
   cv::Mat frame;
 

@@ -4,6 +4,8 @@
 
 #include "asynccapture.hpp"
 
+#include "tracy/Tracy.hpp"
+
 AsyncVideoCapture::AsyncVideoCapture(const std::string &filename, int api)
     : frame_ready(false), running(true) {
   cap.open(filename, api);
@@ -12,7 +14,7 @@ AsyncVideoCapture::AsyncVideoCapture(const std::string &filename, int api)
 }
 
 AsyncVideoCapture::~AsyncVideoCapture() {
-  running = true;
+  running = false;
   cv.notify_all();
   if (thread.joinable())
     thread.join();
@@ -23,8 +25,11 @@ void AsyncVideoCapture::read(cv::Mat &output) {
 
   cv.wait(lock, [this] { return frame_ready || !running.load(); });
 
-  frame.copyTo(output);
-  frame_ready = false;
+  {
+    ZoneScoped;
+    frame.copyTo(output);
+    frame_ready = false;
+  }
 
   lock.unlock();
   cv.notify_one(); // wake up thread
@@ -35,9 +40,9 @@ int AsyncVideoCapture::get(const int prop) {
   return cap.get(prop);
 }
 
-void AsyncVideoCapture::set(const int prop, const double value) {
+bool AsyncVideoCapture::set(const int prop, const double value) {
   std::lock_guard<std::mutex> lock(mutex);
-  cap.set(prop, value);
+  return cap.set(prop, value);
 }
 
 void AsyncVideoCapture::invalidate() {
@@ -54,8 +59,11 @@ void AsyncVideoCapture::update() {
     if (!running)
       break;
 
-    cap.read(frame);
-    frame_ready = true;
+    {
+      ZoneScoped;
+      cap.read(frame);
+      frame_ready = true;
+    }
 
     lock.unlock();
     cv.notify_one(); // frame is ready

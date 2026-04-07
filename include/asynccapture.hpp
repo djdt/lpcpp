@@ -22,7 +22,7 @@ public:
   void read(cv::Mat &output);
 
   int get(const int prop);
-  void set(const int prop, const double value);
+  bool set(const int prop, const double value);
 
   void invalidate();
 
