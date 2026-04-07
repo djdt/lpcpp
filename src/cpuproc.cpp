@@ -33,8 +33,8 @@ bool mask_capillary(cv::InputArray &input, cv::Mat &mask, double &um_per_px,
 
 void unsharp_mask(const cv::Mat &image, cv::Mat &output, double alpha = 1.0) {
   cv::Mat sobelx, sobely, mag;
-  cv::Sobel(image, sobelx, 1, 0, 3);
-  cv::Sobel(image, sobely, 0, 1, 3);
+  cv::Sobel(image, sobelx, CV_32F, 1, 0, 3);
+  cv::Sobel(image, sobely, CV_32F, 0, 1, 3);
   cv::magnitude(sobelx, sobely, mag);
   cv::addWeighted(image, 1.0 + alpha, mag, -alpha, 0, output);
 }
@@ -118,7 +118,7 @@ void find_particles(const cv::Mat &frame, const cv::Mat &mean,
   cv::Mat thresh = cv::Mat(frame.rows, frame.cols, CV_8U);
   cv::compare(diff, std, thresh, cv::CMP_GT);
 
-  cv::bitwise_and(diff > zscore * std, mask, thresh);
+  cv::bitwise_and(thresh, mask, thresh);
 
   std::vector<std::vector<cv::Point>> contours;
   cv::findContours(thresh, contours, cv::RETR_EXTERNAL,

@@ -7,7 +7,7 @@
 
 #include "tracy/Tracy.hpp"
 
-Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
+Particle::Particle(const std::vector<cv::Point> &contour, cv::InputArray &frame,
                    int frame_number, int id)
     : _contour(contour), _frame(frame_number), _frame_count(1), _id(id) {
   ZoneScoped;
@@ -19,9 +19,9 @@ Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
 
   _rect -= cv::Point(_rect.size()) * 0.5;
   _rect += _rect.size();
-  _rect &= cv::Rect(0, 0, frame.cols, frame.rows);
+  _rect &= cv::Rect(0, 0, frame.cols(), frame.rows());
 
-  _image = frame(_rect).clone();
+  _image = frame.getMat()(_rect).clone();
   _mask = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
   cv::drawContours(_mask, {_contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
                    -_rect.tl());
