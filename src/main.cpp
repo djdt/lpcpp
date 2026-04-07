@@ -111,11 +111,6 @@ int main(int argc, char *argv[]) {
       cv::cuda::GpuMat(cpu_frame.rows, cpu_frame.cols, CV_32F);
   auto stream = cv::cuda::Stream();
 
-  // cv::Mat frame(cpu_frame);
-  // cv::Mat mask(cpu_mask);
-  // cv::Mat acc_mean;
-  // cv::Mat acc_var = cv::Mat(frame.rows, frame.cols, CV_32F);
-
   // init the accumulated mean and variance
   frame.convertTo(acc_mean, CV_32F);
   acc_var.setTo(0.f);
