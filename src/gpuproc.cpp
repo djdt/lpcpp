@@ -92,7 +92,7 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
                     std::vector<Particle> &particles, const int current_frame,
                     int current_id) {
 
-  cv::Mat cpu_diff;
+  cv::Mat cpu_diff, cpu_thresh;
   cv::cuda::GpuMat diff;
   {
     ZoneScopedN("diff");
@@ -124,7 +124,6 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
 
   cv::cuda::bitwise_and(thresh, mask, thresh);
 
-  cv::Mat cpu_thresh;
   {
     ZoneScopedN("download");
     thresh.download(cpu_thresh);
@@ -137,7 +136,6 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
     cv::findContours(cpu_thresh, contours, cv::RETR_EXTERNAL,
                      cv::CHAIN_APPROX_SIMPLE);
   }
-
   {
     ZoneScopedN("particles");
 
