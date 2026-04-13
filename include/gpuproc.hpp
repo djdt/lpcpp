@@ -14,6 +14,6 @@ bool init_background(cv::VideoCapture &cap, cv::cuda::GpuMat &mean,
 
 void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
                     const cv::cuda::GpuMat &var, const double zscore,
-                    const cv::cuda::GpuMat &mask,
+                    const cv::cuda::GpuMat &mask, const double unsharp_alpha,
                     std::vector<Particle> &particles, const int current_frame,
                     int current_id);

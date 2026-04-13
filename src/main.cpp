@@ -23,9 +23,6 @@ int main(int argc, char *argv[]) {
   // find and check parameters
   std::filesystem::path path(argv[1]);
 
-  int particle_image_scale = 1;
-  bool export_images = false;
-
   auto parser = ArgumentParser(argc, argv);
   int background_frames = parser.read(
       "background-frames", 1000,
@@ -37,7 +34,13 @@ int main(int argc, char *argv[]) {
                                          "minimum distance between particles");
   double zscore = parser.read(
       "zscore", 3.0, "number of std above the background mean to threshold");
+  double unsharp =
+      parser.read("unsharp", 1.0, "apply an unsharp mask at this alpha");
   bool draw_frames = parser.read("draw", false, "show video and detections");
+  std::string output_path = parser.read<std::string>(
+      "output", std::string(), "output directory for processed data");
+  bool export_images =
+      parser.read("export-images", false, "export images of particles");
   std::string config_path = parser.read<std::string>(
       "config", std::string(),
       "path to filter config, with lines: 'VALUE MIN MAX'\n"
@@ -79,13 +82,25 @@ int main(int argc, char *argv[]) {
   int frame_count = cap.get(cv::CAP_PROP_FRAME_COUNT);
 
   // create output directory
-  auto proc_dir = path.parent_path() / "processed";
-  std::filesystem::create_directory(proc_dir);
-  auto image_dir = proc_dir / "particles";
+  std::filesystem::path output_dir;
+  if (output_path.empty())
+    output_dir = path.parent_path() / "processed";
+  else {
+    output_dir = std::filesystem::path(output_path);
+    if (std::filesystem::exists(output_path) &&
+        !std::filesystem::is_directory(output_path)) {
+      std::cerr << "output path" << output_dir << "is not a directory"
+                << std::endl;
+      return 1;
+    }
+  }
+
+  std::filesystem::create_directory(output_dir);
+  auto image_dir = output_dir / "particles";
   if (export_images) {
     std::filesystem::create_directory(image_dir);
   }
-  std::ofstream results_output(proc_dir / "particles.csv", std::ios::out);
+  std::ofstream results_output(output_dir / "particles.csv", std::ios::out);
   write_particle_header(results_output);
 
   // load a frame and find the ROI
@@ -172,6 +187,7 @@ int main(int argc, char *argv[]) {
 
     // create a color image and draw the contuors
     if (draw_frames) {
+      cv::cvtColor(cpu_frame, cpu_frame, cv::COLOR_GRAY2BGR);
       auto color = cv::Scalar(0, 0, 255);
       int decay = 255 / particle_frames;
       std::vector<std::vector<cv::Point>> contours;
@@ -188,7 +204,7 @@ int main(int argc, char *argv[]) {
       // cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
       // cv::imshow("diff", cpu_diff);
 
-      int key = cv::waitKey(5000);
+      int key = cv::waitKey(10);
       if (key == 'q') {
         break;
       }
@@ -235,10 +251,10 @@ int main(int argc, char *argv[]) {
 
   cv::Mat acc_out(acc_mean);
   acc_out.convertTo(acc_out, CV_8U);
-  cv::imwrite(proc_dir / "background_mean.png", acc_out);
+  cv::imwrite(output_dir / "background_mean.png", acc_out);
   cv::Mat acc_var_out(acc_var);
   acc_var_out.convertTo(acc_var_out, CV_8U);
-  cv::imwrite(proc_dir / "background_var.png", acc_var_out);
+  cv::imwrite(output_dir / "background_var.png", acc_var_out);
 
   auto total_duration = std::chrono::duration<double>(
       std::chrono::system_clock::now() - start_time);

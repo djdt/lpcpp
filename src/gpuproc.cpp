@@ -86,7 +86,7 @@ bool init_background(cv::VideoCapture &cap, cv::cuda::GpuMat &mean,
 
 void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
                     const cv::cuda::GpuMat &var, const double zscore,
-                    const cv::cuda::GpuMat &mask,
+                    const cv::cuda::GpuMat &mask, const double unsharp_alpha,
                     std::vector<Particle> &particles, const int current_frame,
                     int current_id) {
 
@@ -101,7 +101,8 @@ void find_particles(const cv::cuda::GpuMat &frame, const cv::cuda::GpuMat &mean,
   medianFilter3x3(diff, diff);
 
   // sharpen
-  unsharp_mask(diff, diff, 1.0);
+  if (unsharp_alpha > 0.0)
+    unsharp_mask(diff, diff, unsharp_alpha);
 
   // mask differences below x std deviations
   cv::cuda::GpuMat std;
