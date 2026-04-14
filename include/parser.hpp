@@ -8,6 +8,7 @@
 class ArgumentParser {
 private:
   std::vector<std::string> args;
+  std::vector<std::string> args_read;
   bool valid = true;
   std::vector<std::string> help_strings;
 
@@ -38,9 +39,10 @@ public:
     for (auto it = args.begin(); it != args.end(); ++it) {
       if (*it == "--help")
         valid = false;
-      if ((*it).substr(0, 2) == "--" && (*it).substr(2) == name) {
+      if (it->substr(0, 2) == "--" && it->substr(2) == name) {
         // shortcut for flags
         if constexpr (std::is_same<T, bool>::value) {
+          args_read.push_back(name);
           return true;
         }
         std::istringstream iss(*(++it));
@@ -49,6 +51,7 @@ public:
                     << std::endl;
           valid = false;
         };
+        args_read.push_back(name);
         return value;
       }
     } // end for
@@ -60,7 +63,20 @@ public:
     return value;
   }
 
-  bool success() { return valid; }
+  bool success() {
+    if (!valid)
+      return false;
+    for (auto it = args.begin(); it != args.end(); ++it) {
+      if (it->substr(0, 2) == "--") {
+        if (std::find(args_read.begin(), args_read.end(), it->substr(2)) ==
+            args_read.end()) {
+          std::cerr << "unknown argument '" + it->substr(2) + "'" << std::endl;
+          return false;
+        }
+      }
+    }
+    return true;
+  }
 
   friend std::ostream &operator<<(std::ostream &os, const ArgumentParser &p) {
     for (auto it = p.help_strings.begin(); it != p.help_strings.end(); ++it) {

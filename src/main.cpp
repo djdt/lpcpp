@@ -169,8 +169,8 @@ int main(int argc, char *argv[]) {
     }
 
     std::vector<Particle> new_particles;
-    find_particles(frame, acc_mean, acc_var, zscore, mask, new_particles,
-                   frame_pos, particle_id);
+    find_particles(frame, acc_mean, acc_var, zscore, mask, unsharp,
+                   new_particles, frame_pos, particle_id);
     // filter particle based on parameters
     filter_particles(new_particles, particle_filter_args);
     // filter based on last n frames

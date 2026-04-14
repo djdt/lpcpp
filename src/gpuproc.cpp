@@ -10,6 +10,9 @@
 
 const auto sobelx = cv::cuda::createSobelFilter(CV_32F, CV_32F, 1, 0, 3);
 const auto sobely = cv::cuda::createSobelFilter(CV_32F, CV_32F, 0, 1, 3);
+// const auto erode = cv::cuda::createMorphologyFilter(
+//     cv::MORPH_ERODE, CV_8U,
+//     cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
 
 void unsharp_mask(const cv::cuda::GpuMat &image, cv::cuda::GpuMat &output,
                   double alpha = 1.0) {
