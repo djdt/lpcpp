@@ -114,7 +114,6 @@ int main(int argc, char *argv[]) {
   cv::cuda::GpuMat acc_mean;
   cv::cuda::GpuMat acc_var =
       cv::cuda::GpuMat(cpu_frame.rows, cpu_frame.cols, CV_32F);
-  auto stream = cv::cuda::Stream();
 
   // init the accumulated mean and variance
   frame.convertTo(acc_mean, CV_32F);
@@ -138,14 +137,10 @@ int main(int argc, char *argv[]) {
   int particle_id = 0;
   int particle_count = 0;
 
-  cap.read(cpu_frame);
-  frame.upload(cpu_frame, stream);
-
   while (frame_pos++ < frame_count) {
-    stream.waitForCompletion();
-
     cap.read(cpu_frame);
     frame.upload(cpu_frame);
+
     // read in a new frame
     if (cpu_frame.empty()) {
       break;

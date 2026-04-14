@@ -46,19 +46,12 @@ bool init_background(cv::VideoCapture &cap, cv::cuda::GpuMat &mean,
 
   cv::Mat cpu_frame;
   cv::cuda::GpuMat frame;
-  auto stream = cv::cuda::Stream();
 
   auto start_time = std::chrono::system_clock::now();
 
-  // read in first frame
-  cap.read(cpu_frame);
-  frame.upload(cpu_frame, stream);
-
   while (frame_pos++ < frame_count) {
-    stream.waitForCompletion();
-
     cap.read(cpu_frame);
-    frame.upload(cpu_frame, stream);
+    frame.upload(cpu_frame);
 
     if (frame.empty()) {
       std::cerr << "video does not contain enough background frames"
