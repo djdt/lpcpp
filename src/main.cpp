@@ -1,5 +1,4 @@
 #include <deque>
-#include <execution>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -172,29 +171,16 @@ int main(int argc, char *argv[]) {
           },
           particle_distance);
     }
-    particle_count += new_particles.size();
     particles.push_back(new_particles);
 
     // create a color image and draw the contuors
     if (draw_frames) {
-      cv::cvtColor(cpu_frame, cpu_frame, cv::COLOR_GRAY2BGR);
-      auto color = cv::Scalar(0, 0, 255);
-      int decay = 255 / particle_frames;
-      std::vector<std::vector<cv::Point>> contours;
-      for (auto it = particles.rbegin(); it != particles.rend(); ++it) {
-        contours.resize(it->size());
-        std::transform(std::execution::par, it->begin(), it->end(),
-                       contours.begin(),
-                       [](const Particle &p) { return p.contour(); });
-        cv::drawContours(cpu_frame, contours, -1, color, 1.0, 8);
-        color[2] -= decay;
-      }
-      // get the filtered contours
+      cv::Mat rgb_frame;
+      draw_particles_on_frame(cpu_frame, rgb_frame, particles.rbegin(),
+                              particles.rend(), particle_frames);
       cv::imshow("frame", cpu_frame);
-      // cpu_diff.convertTo(cpu_diff, -1, 1.0 / 255.0, 0.5);
-      // cv::imshow("diff", cpu_diff);
 
-      int key = cv::waitKey(10);
+      int key = cv::waitKey(50);
       if (key == 'q') {
         break;
       }
@@ -211,6 +197,7 @@ int main(int argc, char *argv[]) {
         }
       }
       particles.pop_front();
+      particle_count += particles.size();
     }
 
     // update progress

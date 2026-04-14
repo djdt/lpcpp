@@ -53,6 +53,8 @@ struct filter_args {
   double max_radius = 1e3;
   double min_intensity = 0.0;
   double max_intensity = 0.0;
+  double min_sharpness = 0.0;
+  double max_sharpness = 0.0;
 };
 
 template <typename Iter, typename IdxIter>

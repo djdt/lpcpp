@@ -151,6 +151,13 @@ void filter_particles(std::vector<Particle> &particles,
                 return true;
               }
             }
+            if (args.min_sharpness != args.max_sharpness) {
+              double sharpness = p.sharpness();
+              if (sharpness < args.min_sharpness or
+                  sharpness > args.max_sharpness) {
+                return true;
+              }
+            }
             return false;
           }),
       particles.end());

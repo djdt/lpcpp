@@ -1,3 +1,5 @@
+#include <deque>
+#include <execution>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -10,7 +12,7 @@
 
 void write_particle_header(std::ofstream &ofs) {
   ofs << "id,frame,frame_count,area,aspect,circularity,convexity,intensity,"
-         "radius,x,y"
+         "radius,sharpness,x,y"
       << std::endl;
 }
 void write_particle_data(const std::vector<Particle> &particles,
@@ -19,8 +21,8 @@ void write_particle_data(const std::vector<Particle> &particles,
     ofs << it->id() << "," << it->frame_number() << "," << it->frame_count()
         << "," << it->area() << "," << it->aspect() << "," << it->circularity()
         << "," << it->convexity() << "," << it->intensity() << ","
-        << it->radius() << "," << it->center().x << "," << it->center().y
-        << std::endl;
+        << it->radius() << "," << it->sharpness() << "," << it->center().x
+        << "," << it->center().y << std::endl;
   }
 }
 bool write_particle_images(const std::vector<Particle> &particles,
@@ -60,5 +62,12 @@ void read_filter_config(std::string path, filter_args &args) {
       ifs >> args.min_convexity >> args.max_convexity;
     else if (line == "radius")
       ifs >> args.min_radius >> args.max_radius;
+    else if (line == "intensity")
+      ifs >> args.min_intensity >> args.max_intensity;
+    else if (line == "sharpness")
+      ifs >> args.min_sharpness >> args.max_sharpness;
+    else {
+      std::cout << "unknown filter value '" << line << "'" << std::endl;
+    }
   }
 }
