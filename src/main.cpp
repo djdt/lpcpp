@@ -14,7 +14,11 @@
 #include "io.hpp"
 #include "util.hpp"
 
+#if FORCE_CPU
 #define MatType cv::Mat
+#else
+#define MatType cv::UMat
+#endif
 
 int main(int argc, char *argv[]) {
 
