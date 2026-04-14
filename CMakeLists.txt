@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.27)
 include(FetchContent)
-project(lpcpp LANGUAGES CXX CUDA)
+project(lpcpp LANGUAGES CXX)
 set(CMAKE_BUILD_TYPE Release)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -16,7 +16,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS Yes)
 #
 # FetchContent_MakeAvailable(tracy)
 
-file(GLOB lpcpp_SRC "src/*.cpp" "src/*.cu" "include/*.hpp")
+file(GLOB lpcpp_SRC "src/*.cpp" "include/*.hpp")
+list(FILTER lpcpp_SRC EXCLUDE REGEX "gpu")
+
 add_executable(lpcpp ${lpcpp_SRC})
 target_include_directories(lpcpp PUBLIC "${CMAKE_SOURCE_DIR}/include")
 

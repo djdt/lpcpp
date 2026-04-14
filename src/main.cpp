@@ -3,8 +3,6 @@
 #include <fstream>
 #include <iostream>
 #include <opencv2/core.hpp>
-#include <opencv2/core/cuda.hpp>
-#include <opencv2/cudaimgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <string>
@@ -13,9 +11,10 @@
 #include "particle.hpp"
 
 #include "cpuproc.hpp"
-#include "gpuproc.hpp"
 #include "io.hpp"
 #include "util.hpp"
+
+#define MatType cv::Mat
 
 int main(int argc, char *argv[]) {
 
@@ -93,8 +92,8 @@ int main(int argc, char *argv[]) {
   write_particle_header(results_output);
 
   // load a frame and find the ROI
-  cv::Mat cpu_frame, cpu_mask;
-  cap.read(cpu_frame);
+  MatType frame, mask;
+  cap.read(frame);
 
   std::cout << "Processsing " << path << std::endl;
 
@@ -102,18 +101,15 @@ int main(int argc, char *argv[]) {
   std::cout << "\tsize = " << width << " x " << height << std::endl;
 
   double um_per_px;
-  if (mask_capillary(cpu_frame, cpu_mask, um_per_px)) {
+  if (mask_capillary(frame, mask, um_per_px)) {
     std::cerr << "\tcould not detect capillary" << std::endl;
     return 1;
   }
   std::cout << "\tµm per px = " << um_per_px << std::endl;
 
   // setup arrays
-  cv::cuda::GpuMat frame(cpu_frame);
-  cv::cuda::GpuMat mask(cpu_mask);
-  cv::cuda::GpuMat acc_mean;
-  cv::cuda::GpuMat acc_var =
-      cv::cuda::GpuMat(cpu_frame.rows, cpu_frame.cols, CV_32F);
+  MatType acc_mean;
+  MatType acc_var = MatType(frame.rows, frame.cols, CV_32F);
 
   // init the accumulated mean and variance
   frame.convertTo(acc_mean, CV_32F);
@@ -138,11 +134,10 @@ int main(int argc, char *argv[]) {
   int particle_count = 0;
 
   while (frame_pos++ < frame_count) {
-    cap.read(cpu_frame);
-    frame.upload(cpu_frame);
+    cap.read(frame);
 
     // read in a new frame
-    if (cpu_frame.empty()) {
+    if (frame.empty()) {
       break;
     }
 
@@ -159,21 +154,21 @@ int main(int argc, char *argv[]) {
     filter_particles(new_particles, particle_filter_args);
     // filter based on last n frames
     for (auto it = particles.begin(); it != particles.end(); ++it) {
-      filter_existing_particles(
-          *it, new_particles,
-          [](const Particle &a, const Particle &b) {
-            return a.centerWeightedIntensity() > b.centerWeightedIntensity();
-          },
-          particle_distance);
+      // filter_existing_particles(
+      //     *it, new_particles,
+      //     [](const Particle &a, const Particle &b) {
+      //       return a.centerWeightedIntensity() > b.centerWeightedIntensity();
+      //     },
+      //     particle_distance);
     }
     particles.push_back(new_particles);
 
     // create a color image and draw the contuors
     if (draw_frames) {
-      cv::Mat rgb_frame;
-      draw_particles_on_frame(cpu_frame, rgb_frame, particles.rbegin(),
+      MatType rgb_frame;
+      draw_particles_on_frame(frame, rgb_frame, particles.rbegin(),
                               particles.rend(), particle_frames);
-      cv::imshow("frame", cpu_frame);
+      cv::imshow("frame", frame);
 
       int key = cv::waitKey(50);
       if (key == 'q') {
@@ -221,10 +216,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  cv::Mat acc_out(acc_mean);
+  MatType acc_out(acc_mean);
   acc_out.convertTo(acc_out, CV_8U);
   cv::imwrite(output_dir / "background_mean.png", acc_out);
-  cv::Mat acc_var_out(acc_var);
+  MatType acc_var_out(acc_var);
   acc_var_out.convertTo(acc_var_out, CV_8U);
   cv::imwrite(output_dir / "background_var.png", acc_var_out);
 
