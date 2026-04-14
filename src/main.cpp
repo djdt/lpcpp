@@ -47,18 +47,8 @@ int main(int argc, char *argv[]) {
       "\tvalid values are: 'area', 'aspect', circularity', 'convexity', "
       "'radius'");
 
-  filter_args particle_filter_args{
-      .min_area = 5.0,
-      .max_area = 9999.0,
-      .min_aspect = 0.7,
-      .max_aspect = 1.0,
-      .min_circularity = 0.8,
-      .max_circularity = 1.0,
-      .min_convexity = 0.9,
-      .max_convexity = 1.0,
-      .min_radius = 1.0,
-      .max_radius = 200.0,
-  };
+  filter_args particle_filter_args;
+
   if (!config_path.empty()) {
     read_filter_config(config_path, particle_filter_args);
   }
@@ -109,14 +99,14 @@ int main(int argc, char *argv[]) {
 
   std::cout << "Processsing " << path << std::endl;
 
+  std::cout << "\tframes = " << frame_count << std::endl;
+  std::cout << "\tsize = " << width << " x " << height << std::endl;
+
   double um_per_px;
   if (mask_capillary(cpu_frame, cpu_mask, um_per_px)) {
     std::cerr << "\tcould not detect capillary" << std::endl;
     return 1;
   }
-
-  std::cout << "\tframes = " << frame_count << std::endl;
-  std::cout << "\tsize = " << width << " x " << height << std::endl;
   std::cout << "\tµm per px = " << um_per_px << std::endl;
 
   // setup arrays
