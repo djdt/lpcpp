@@ -17,9 +17,8 @@
 int main(int argc, char *argv[]) {
 
   // find and check parameters
-  std::filesystem::path path(argv[1]);
-
   auto parser = ArgumentParser(argc, argv);
+
   int background_frames = parser.read(
       "background-frames", 1000,
       "number of background frames used to determine initial mean and std");
@@ -49,15 +48,17 @@ int main(int argc, char *argv[]) {
     read_filter_config(config_path, particle_filter_args);
   }
 
-  if (!parser.success()) {
+  if (argc < 2 || !parser.success()) {
     std::cerr << "Usage: lpcpp FILE [options]" << std::endl;
     std::cerr << "Options:" << std::endl;
     std::cerr << parser;
     return 1;
   }
 
+  std::filesystem::path path(argv[1]);
+
   // create capture and read some props
-  auto cap = cv::VideoCapture(path, cv::CAP_FFMPEG);
+  auto cap = cv::VideoCapture(path.string(), cv::CAP_FFMPEG);
   if (!cap.set(cv::CAP_PROP_CONVERT_RGB, 0)) {
     std::cerr << "cannot read as greyscale" << std::endl;
     return 1;
@@ -216,10 +217,10 @@ int main(int argc, char *argv[]) {
 
   cv::UMat acc_out(acc_mean);
   acc_out.convertTo(acc_out, CV_8U);
-  cv::imwrite(output_dir / "background_mean.png", acc_out);
+  cv::imwrite((output_dir / "background_mean.png").string(), acc_out);
   cv::UMat acc_var_out(acc_var);
   acc_var_out.convertTo(acc_var_out, CV_8U);
-  cv::imwrite(output_dir / "background_var.png", acc_var_out);
+  cv::imwrite((output_dir / "background_var.png").string(), acc_var_out);
 
   auto total_duration = std::chrono::duration<double>(
       std::chrono::system_clock::now() - start_time);

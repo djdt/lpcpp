@@ -1,5 +1,3 @@
-#include <deque>
-#include <execution>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -39,7 +37,7 @@ bool write_particle_images(const std::vector<Particle> &particles,
     // cv::polylines(rgb, it->imageContour(), -1, color, 1.0, 8);
     cv::fillPoly(fill, it->imageContour(), 255);
     cv::insertChannel(fill, rgb, 2);
-    if (not cv::imwrite(out, rgb)) {
+    if (not cv::imwrite(out.string(), rgb)) {
       std::cerr << "failed to save " << out << std::endl;
       return true;
     }

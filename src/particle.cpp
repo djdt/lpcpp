@@ -1,6 +1,7 @@
 #include "particle.hpp"
 
 #include <execution>
+#include <numbers>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
