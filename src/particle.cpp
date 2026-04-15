@@ -1,13 +1,13 @@
 #include "particle.hpp"
 
-#include <opencv2/imgcodecs.hpp>
-
 #include <execution>
+#include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
-Particle::Particle(const std::vector<cv::Point> &contour, cv::InputArray &frame,
+Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
                    int frame_number, int id)
     : _contour(contour), _frame(frame_number), _frame_count(1), _id(id) {
+  //
   // moments for center and area
   _moments = cv::moments(_contour);
 
@@ -15,9 +15,9 @@ Particle::Particle(const std::vector<cv::Point> &contour, cv::InputArray &frame,
 
   _rect -= cv::Point(_rect.size()) * 0.5;
   _rect += _rect.size();
-  _rect &= cv::Rect(0, 0, frame.cols(), frame.rows());
+  _rect &= cv::Rect(0, 0, frame.cols, frame.rows);
 
-  _image = frame.getMat()(_rect).clone();
+  _image = frame(_rect).clone();
   _mask = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
   cv::drawContours(_mask, {_contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
                    -_rect.tl());

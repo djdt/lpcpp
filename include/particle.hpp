@@ -17,7 +17,8 @@ private:
   cv::Moments _moments;
 
 public:
-  Particle(const std::vector<cv::Point> &contour, cv::InputArray &frame,
+  // ensure a cv::Mat here
+  Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
            int frame_number, int id);
 
   double area() const;

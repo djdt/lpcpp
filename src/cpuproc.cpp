@@ -7,14 +7,13 @@
 #include "particle.hpp"
 #include "util.hpp"
 
-bool mask_capillary(cv::InputArray &input, cv::Mat &mask, double &um_per_px,
+bool mask_capillary(cv::InputArray &input, cv::InputOutputArray &mask,
+                    double &um_per_px,
                     const double capillary_diameter = 750.0) {
-  cv::Mat frame = input.getMat();
-
   std::vector<cv::Vec3f> circles;
-  cv::HoughCircles(frame, circles, cv::HOUGH_GRADIENT, 1.0,
-                   static_cast<float>(frame.rows) / 2.f, 50, 5, frame.rows / 4,
-                   frame.rows);
+  cv::HoughCircles(input, circles, cv::HOUGH_GRADIENT, 1.0,
+                   static_cast<float>(input.rows()) / 2.f, 50, 5,
+                   input.rows() / 4, input.rows());
 
   if (circles.size() == 0) {
     return true;
@@ -24,41 +23,41 @@ bool mask_capillary(cv::InputArray &input, cv::Mat &mask, double &um_per_px,
   }
 
   um_per_px = capillary_diameter / (2.0 * circles[0][2]);
-  mask = cv::Mat::zeros(frame.rows, frame.cols, CV_8U);
+
+  mask.createSameSize(input, CV_8U);
+  mask.setTo(0);
   cv::circle(mask, cv::Point(circles[0][0], circles[0][1]), circles[0][2] * 0.9,
              255, -1);
   return false;
 }
 
-void unsharp_mask(const cv::Mat &image, cv::Mat &output, double alpha = 1.0) {
-  cv::Mat sobelx, sobely, mag;
+void unsharp_mask(cv::InputArray &image, cv::OutputArray &output,
+                  double alpha = 1.0) {
+  cv::UMat sobelx, sobely, mag;
   cv::Sobel(image, sobelx, CV_32F, 1, 0, 3);
   cv::Sobel(image, sobely, CV_32F, 0, 1, 3);
   cv::magnitude(sobelx, sobely, mag);
   cv::addWeighted(image, 1.0 + alpha, mag, -alpha, 0, output);
 }
 
-void update_background(const cv::Mat &frame, cv::Mat &mean, cv::Mat &var,
-                       int pos) {
+void update_background(cv::InputArray &frame, cv::InputOutputArray &mean,
+                       cv::InputOutputArray &var, int pos) {
   double weight = 1.0 / static_cast<double>(pos);
 
-  cv::Mat frame_var;
-  frame.convertTo(frame_var, CV_32F);
+  cv::addWeighted(frame, weight, mean, 1.0 - weight, 0.0, mean, CV_32F);
 
-  cv::addWeighted(frame_var, weight, mean, 1.0 - weight, 0.0, mean);
-
-  cv::subtract(frame_var, mean, frame_var);
-  cv::pow(frame_var, 2.0, frame_var);
-
-  cv::addWeighted(frame_var, weight, var, 1.0 - weight, 0.0, var);
+  cv::UMat tmp;
+  cv::subtract(frame, mean, tmp, cv::noArray(), CV_32F);
+  cv::pow(tmp, 2.0, tmp);
+  cv::addWeighted(tmp, weight, var, 1.0 - weight, 0.0, var);
 }
 
-bool init_background(cv::VideoCapture &cap, cv::Mat &mean, cv::Mat &var,
-                     int frame_count) {
+bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
+                     cv::InputOutputArray &var, int frame_count) {
   int frame_pos = 0;
   cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
 
-  cv::Mat frame;
+  cv::UMat frame;
 
   auto start_time = std::chrono::system_clock::now();
 
@@ -69,7 +68,6 @@ bool init_background(cv::VideoCapture &cap, cv::Mat &mean, cv::Mat &var,
                 << std::endl;
       return true;
     }
-    cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
 
     // update the background accumulated mean and variance
     update_background(frame, mean, var, frame_pos);
@@ -91,17 +89,18 @@ bool init_background(cv::VideoCapture &cap, cv::Mat &mean, cv::Mat &var,
   return false;
 }
 
-void find_particles(const cv::Mat &frame, const cv::Mat &mean,
-                    const cv::Mat &var, const double zscore,
-                    const cv::Mat &mask, const double unsharp_alpha,
+void find_particles(cv::InputArray &frame, cv::InputArray &mean,
+                    cv::InputArray &var, const double zscore,
+                    cv::InputArray &mask, const double unsharp_alpha,
                     std::vector<Particle> &particles, const int current_frame,
                     int current_id) {
-
   // calculate the difference between frame and mean
-  cv::Mat diff;
-  frame.convertTo(diff, CV_32F);
+  cv::UMat diff;
+  frame.copyTo(diff);
+  diff.convertTo(diff, CV_32F);
+  // frame.getMat().convertTo(diff, CV_32F);
   cv::subtract(diff, mean, diff);
-  diff *= -1.f;
+  cv::multiply(diff, -1.f, diff);
 
   // median blur
   cv::medianBlur(diff, diff, 3);
@@ -111,11 +110,11 @@ void find_particles(const cv::Mat &frame, const cv::Mat &mean,
     unsharp_mask(diff, diff, unsharp_alpha);
 
   // mask differences below x std deviations
-  cv::Mat std;
+  cv::UMat std;
   cv::sqrt(var, std);
-  std *= zscore;
+  cv::multiply(std, zscore, std);
 
-  cv::Mat thresh = cv::Mat(frame.rows, frame.cols, CV_8U);
+  cv::UMat thresh = cv::UMat(frame.rows(), frame.cols(), CV_8U);
   cv::compare(diff, std, thresh, cv::CMP_GT);
 
   cv::bitwise_and(thresh, mask, thresh);
@@ -124,10 +123,11 @@ void find_particles(const cv::Mat &frame, const cv::Mat &mean,
   cv::findContours(thresh, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
+  cv::Mat cpu_diff = diff.getMat(cv::ACCESS_READ);
   particles.reserve(contours.size());
-  std::transform(contours.begin(), contours.end(),
-                 std::back_inserter(particles),
-                 [&](const std::vector<cv::Point> &contour) {
-                   return Particle(contour, diff, current_frame, current_id++);
-                 });
+  std::transform(
+      contours.begin(), contours.end(), std::back_inserter(particles),
+      [&](const std::vector<cv::Point> &contour) {
+        return Particle(contour, cpu_diff, current_frame, current_id++);
+      });
 }
