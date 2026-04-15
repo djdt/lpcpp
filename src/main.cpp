@@ -132,7 +132,6 @@ int main(int argc, char *argv[]) {
   int particle_count = 0;
 
   while (frame_pos++ < frame_count) {
-    ZoneScoped;
     cap.read(frame);
 
     // read in a new frame
