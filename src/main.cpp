@@ -185,8 +185,8 @@ int main(int argc, char *argv[]) {
           return 1;
         }
       }
+      particle_count += particles[0].size();
       particles.pop_front();
-      particle_count += particles.size();
     }
 
     // update progress
