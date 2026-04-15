@@ -1,13 +1,13 @@
 #include "particle.hpp"
 
-#include <opencv2/imgcodecs.hpp>
-
 #include <execution>
+#include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
-Particle::Particle(const std::vector<cv::Point> &contour, cv::InputArray &frame,
+Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
                    int frame_number, int id)
     : _contour(contour), _frame(frame_number), _frame_count(1), _id(id) {
+  //
   // moments for center and area
   _moments = cv::moments(_contour);
 
@@ -15,15 +15,10 @@ Particle::Particle(const std::vector<cv::Point> &contour, cv::InputArray &frame,
 
   _rect -= cv::Point(_rect.size()) * 0.5;
   _rect += _rect.size();
-  _rect &= cv::Rect(0, 0, frame.cols(), frame.rows());
+  _rect &= cv::Rect(0, 0, frame.cols, frame.rows);
 
-#if FORCE_CPU
-  _image = frame.getMat()(_rect);
-#else
-  _image = frame.getUMat()(_rect);
-#endif
-
-  _mask = MatType::zeros(_image.rows, _image.cols, CV_8U);
+  _image = frame(_rect).clone();
+  _mask = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
   cv::drawContours(_mask, {_contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
                    -_rect.tl());
 };
@@ -34,7 +29,7 @@ int Particle::frame_count() const { return _frame_count; }
 
 int Particle::frame_number() const { return _frame; }
 
-const MatType &Particle::image() const { return _image; }
+const cv::Mat &Particle::image() const { return _image; }
 
 int Particle::id() const { return _id; }
 
@@ -74,7 +69,7 @@ const std::vector<cv::Point> Particle::imageContour() const {
 }
 
 const double Particle::centerWeightedIntensity() const {
-  MatType weights(_image.rows, _image.cols, CV_32F);
+  cv::Mat weights(_image.rows, _image.cols, CV_32F);
   cv::distanceTransform(_mask, weights, cv::DIST_L2, cv::DIST_MASK_3);
   cv::multiply(weights, _image, weights, 1.0 / cv::sum(weights)[0]);
 
@@ -82,7 +77,7 @@ const double Particle::centerWeightedIntensity() const {
 }
 
 double Particle::intensity() const {
-  MatType intensity = MatType::zeros(_image.rows, _image.cols, CV_8U);
+  cv::Mat intensity = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
   _image.copyTo(intensity, _mask);
   return cv::sum(intensity)[0];
 };
@@ -96,7 +91,7 @@ double Particle::radius() const {
 }
 
 double Particle::sharpness() const {
-  MatType laplace;
+  cv::Mat laplace;
   cv::Laplacian(_image, laplace, CV_32F);
   cv::Scalar mu, sigma;
   cv::meanStdDev(laplace, mu, sigma);

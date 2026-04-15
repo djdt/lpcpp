@@ -7,12 +7,6 @@
 #include "particle.hpp"
 #include "util.hpp"
 
-#if FORCE_CPU
-#define MatType cv::Mat
-#else
-#define MatType cv::UMat
-#endif
-
 bool mask_capillary(cv::InputArray &input, cv::InputOutputArray &mask,
                     double &um_per_px,
                     const double capillary_diameter = 750.0) {
@@ -39,7 +33,7 @@ bool mask_capillary(cv::InputArray &input, cv::InputOutputArray &mask,
 
 void unsharp_mask(cv::InputArray &image, cv::OutputArray &output,
                   double alpha = 1.0) {
-  MatType sobelx, sobely, mag;
+  cv::UMat sobelx, sobely, mag;
   cv::Sobel(image, sobelx, CV_32F, 1, 0, 3);
   cv::Sobel(image, sobely, CV_32F, 0, 1, 3);
   cv::magnitude(sobelx, sobely, mag);
@@ -52,7 +46,7 @@ void update_background(cv::InputArray &frame, cv::InputOutputArray &mean,
 
   cv::addWeighted(frame, weight, mean, 1.0 - weight, 0.0, mean, CV_32F);
 
-  MatType tmp;
+  cv::UMat tmp;
   cv::subtract(frame, mean, tmp, cv::noArray(), CV_32F);
   cv::pow(tmp, 2.0, tmp);
   cv::addWeighted(tmp, weight, var, 1.0 - weight, 0.0, var);
@@ -63,7 +57,7 @@ bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
   int frame_pos = 0;
   cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
 
-  MatType frame;
+  cv::UMat frame;
 
   auto start_time = std::chrono::system_clock::now();
 
@@ -100,9 +94,8 @@ void find_particles(cv::InputArray &frame, cv::InputArray &mean,
                     cv::InputArray &mask, const double unsharp_alpha,
                     std::vector<Particle> &particles, const int current_frame,
                     int current_id) {
-
   // calculate the difference between frame and mean
-  MatType diff;
+  cv::UMat diff;
   frame.copyTo(diff);
   diff.convertTo(diff, CV_32F);
   // frame.getMat().convertTo(diff, CV_32F);
@@ -117,11 +110,11 @@ void find_particles(cv::InputArray &frame, cv::InputArray &mean,
     unsharp_mask(diff, diff, unsharp_alpha);
 
   // mask differences below x std deviations
-  MatType std;
+  cv::UMat std;
   cv::sqrt(var, std);
   cv::multiply(std, zscore, std);
 
-  MatType thresh = cv::UMat(frame.rows(), frame.cols(), CV_8U);
+  cv::UMat thresh = cv::UMat(frame.rows(), frame.cols(), CV_8U);
   cv::compare(diff, std, thresh, cv::CMP_GT);
 
   cv::bitwise_and(thresh, mask, thresh);
@@ -130,10 +123,11 @@ void find_particles(cv::InputArray &frame, cv::InputArray &mean,
   cv::findContours(thresh, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
+  cv::Mat cpu_diff = diff.getMat(cv::ACCESS_READ);
   particles.reserve(contours.size());
-  std::transform(contours.begin(), contours.end(),
-                 std::back_inserter(particles),
-                 [&](const std::vector<cv::Point> &contour) {
-                   return Particle(contour, diff, current_frame, current_id++);
-                 });
+  std::transform(
+      contours.begin(), contours.end(), std::back_inserter(particles),
+      [&](const std::vector<cv::Point> &contour) {
+        return Particle(contour, cpu_diff, current_frame, current_id++);
+      });
 }

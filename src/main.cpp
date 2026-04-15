@@ -14,12 +14,6 @@
 #include "io.hpp"
 #include "util.hpp"
 
-#if FORCE_CPU
-#define MatType cv::Mat
-#else
-#define MatType cv::UMat
-#endif
-
 int main(int argc, char *argv[]) {
 
   // find and check parameters
@@ -96,7 +90,7 @@ int main(int argc, char *argv[]) {
   write_particle_header(results_output);
 
   // load a frame and find the ROI
-  MatType frame, mask;
+  cv::UMat frame, mask;
   cap.read(frame);
 
   std::cout << "Processsing " << path << std::endl;
@@ -112,8 +106,8 @@ int main(int argc, char *argv[]) {
   std::cout << "\tµm per px = " << um_per_px << std::endl;
 
   // setup arrays
-  MatType acc_mean;
-  MatType acc_var = MatType(frame.rows, frame.cols, CV_32F);
+  cv::UMat acc_mean;
+  cv::UMat acc_var = cv::UMat(frame.rows, frame.cols, CV_32F);
 
   // init the accumulated mean and variance
   frame.convertTo(acc_mean, CV_32F);
@@ -138,6 +132,7 @@ int main(int argc, char *argv[]) {
   int particle_count = 0;
 
   while (frame_pos++ < frame_count) {
+    ZoneScoped;
     cap.read(frame);
 
     // read in a new frame
@@ -158,18 +153,18 @@ int main(int argc, char *argv[]) {
     filter_particles(new_particles, particle_filter_args);
     // filter based on last n frames
     for (auto it = particles.begin(); it != particles.end(); ++it) {
-      // filter_existing_particles(
-      //     *it, new_particles,
-      //     [](const Particle &a, const Particle &b) {
-      //       return a.centerWeightedIntensity() > b.centerWeightedIntensity();
-      //     },
-      //     particle_distance);
+      filter_existing_particles(
+          *it, new_particles,
+          [](const Particle &a, const Particle &b) {
+            return a.centerWeightedIntensity() > b.centerWeightedIntensity();
+          },
+          particle_distance);
     }
     particles.push_back(new_particles);
 
     // create a color image and draw the contuors
     if (draw_frames) {
-      MatType rgb_frame;
+      cv::UMat rgb_frame;
       draw_particles_on_frame(frame, rgb_frame, particles.rbegin(),
                               particles.rend(), particle_frames);
       cv::imshow("frame", frame);
@@ -220,10 +215,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  MatType acc_out(acc_mean);
+  cv::UMat acc_out(acc_mean);
   acc_out.convertTo(acc_out, CV_8U);
   cv::imwrite(output_dir / "background_mean.png", acc_out);
-  MatType acc_var_out(acc_var);
+  cv::UMat acc_var_out(acc_var);
   acc_var_out.convertTo(acc_var_out, CV_8U);
   cv::imwrite(output_dir / "background_var.png", acc_var_out);
 

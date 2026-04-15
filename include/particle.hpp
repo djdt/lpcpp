@@ -3,18 +3,11 @@
 #include <opencv2/core.hpp>
 #include <vector>
 
-#if FORCE_CPU
-#define MatType cv::Mat
-#else
-#define MatType cv::UMat
-#endif
-
-
 class Particle {
 private:
   std::vector<cv::Point> _contour;
-  MatType _image;
-  MatType _mask;
+  cv::Mat _image;
+  cv::Mat _mask;
   cv::Rect _rect;
 
   int _id;
@@ -24,7 +17,8 @@ private:
   cv::Moments _moments;
 
 public:
-  Particle(const std::vector<cv::Point> &contour, cv::InputArray &frame,
+  // ensure a cv::Mat here
+  Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
            int frame_number, int id);
 
   double area() const;
@@ -36,7 +30,7 @@ public:
   double convexity() const;
   int frame_number() const;
   int frame_count() const;
-  const MatType &image() const;
+  const cv::Mat &image() const;
   const std::vector<cv::Point> imageContour() const;
   double intensity() const;
   int id() const;

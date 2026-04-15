@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.27)
-include(FetchContent)
+# include(FetchContent)
 project(lpcpp LANGUAGES CXX)
 set(CMAKE_BUILD_TYPE Release)
 
