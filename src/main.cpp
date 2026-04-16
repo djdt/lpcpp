@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
   int particle_frames =
       parser.read("particle-frames", 10,
                   "number of frames to track particles after last detection");
-  double particle_distance = parser.read("particle-distance", 10.0,
+  double particle_distance = parser.read("particle-distance", 3.0,
                                          "minimum distance between particles");
   double zscore = parser.read(
       "zscore", 3.0, "number of std above the background mean to threshold");
