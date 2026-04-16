@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
       "background-frames", 1000,
       "number of background frames used to determine initial mean and std");
   int particle_frames =
-      parser.read("particle-frames", 10,
+      parser.read("particle-frames", 40,
                   "number of frames to track particles after last detection");
   double particle_distance = parser.read("particle-distance", 3.0,
                                          "minimum distance between particles");

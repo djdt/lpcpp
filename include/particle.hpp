@@ -46,14 +46,14 @@ struct filter_args {
   double max_area = 1e4;
   double min_aspect = 0.5;
   double max_aspect = 1.0;
-  double min_circularity = 0.75;
+  double min_circularity = 0.5;
   double max_circularity = 1.0;
-  double min_convexity = 0.75;
+  double min_convexity = 0.5;
   double max_convexity = 1.0;
   double min_radius = 1.0;
   double max_radius = 1e3;
-  double min_intensity = 0.0;
-  double max_intensity = 0.0;
+  double min_intensity = 1e3;
+  double max_intensity = 1e6;
   double min_sharpness = 0.0;
   double max_sharpness = 0.0;
 };
