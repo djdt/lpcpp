@@ -172,7 +172,7 @@ int main(int argc, char *argv[]) {
       cv::UMat rgb_frame;
       draw_particles_on_frame(frame, rgb_frame, particles.rbegin(),
                               particles.rend(), particle_frames);
-      cv::imshow("frame", frame);
+      cv::imshow("frame", rgb_frame);
 
       int key = cv::waitKey(50);
       if (key == 'q') {
