@@ -7,28 +7,16 @@
 #include "particle.hpp"
 #include "util.hpp"
 
-bool mask_capillary(cv::InputArray &input, cv::InputOutputArray &mask,
-                    double &um_per_px,
-                    const double capillary_diameter = 750.0) {
+cv::Vec3f find_capillary(cv::InputArray &input) {
   std::vector<cv::Vec3f> circles;
   cv::HoughCircles(input, circles, cv::HOUGH_GRADIENT, 1.0,
                    static_cast<float>(input.rows()) / 2.f, 50, 5,
                    input.rows() / 4, input.rows());
 
   if (circles.size() == 0) {
-    return true;
-  } else {
-    std::cout << "\tcapillary detected at " << circles[0][0] << " x "
-              << circles[0][1] << " with radius " << circles[0][2] << std::endl;
+    return cv::Vec3f();
   }
-
-  um_per_px = capillary_diameter / (2.0 * circles[0][2]);
-
-  mask.createSameSize(input, CV_8U);
-  mask.setTo(0);
-  cv::circle(mask, cv::Point(circles[0][0], circles[0][1]), circles[0][2] * 0.9,
-             255, -1);
-  return false;
+  return circles[0];
 }
 
 void unsharp_mask(cv::InputArray &image, cv::OutputArray &output,

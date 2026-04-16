@@ -3,8 +3,7 @@
 
 #include "particle.hpp"
 
-bool mask_capillary(cv::InputArray &input, cv::InputOutputArray &mask,
-                    double &um_per_px, const double capillary_diameter = 750.0);
+bool find_capillary(cv::InputArray &input);
 
 void unsharp_mask(cv::InputArray &image, cv::OutputArray &output, double alpha);
 

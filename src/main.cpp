@@ -93,26 +93,31 @@ int main(int argc, char *argv[]) {
   // load a frame and find the ROI
   cv::UMat frame, mask;
   cap.read(frame);
+  mask = cv::UMat::zeros(frame.rows, frame.cols, CV_8U);
 
   std::cout << "Processsing " << path << std::endl;
 
   std::cout << "\tframes = " << frame_count << std::endl;
   std::cout << "\tsize = " << width << " x " << height << std::endl;
 
-  double um_per_px;
-  if (mask_capillary(frame, mask, um_per_px)) {
+  cv::Vec3f capillary = find_capillary(frame);
+  if (capillary[2] == 0.0) {
     std::cerr << "\tcould not detect capillary" << std::endl;
     return 1;
+  } else {
+    std::cout << "\tcapillary detected at " << capillary[0] << " x "
+              << capillary[1] << " with radius " << capillary[2] << " px"
+              << std::endl;
   }
-  std::cout << "\tµm per px = " << um_per_px << std::endl;
+  cv::circle(mask, cv::Point(capillary[0], capillary[1]), capillary[2] * 0.9,
+             255, -1);
 
   // setup arrays
   cv::UMat acc_mean;
-  cv::UMat acc_var = cv::UMat(frame.rows, frame.cols, CV_32F);
+  cv::UMat acc_var = cv::UMat::zeros(frame.rows, frame.cols, CV_32F);
 
   // init the accumulated mean and variance
   frame.convertTo(acc_mean, CV_32F);
-  acc_var.setTo(0.f);
 
   // begin by reading the required number of frames to predict the background
   init_background(cap, acc_mean, acc_var, background_frames);
