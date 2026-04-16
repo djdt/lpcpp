@@ -14,7 +14,7 @@ cv::Vec3f find_capillary(cv::InputArray &input) {
                    input.rows() / 4, input.rows());
 
   if (circles.size() == 0) {
-    return cv::Vec3f();
+    return cv::Vec3f(0.f, 0.f, 0.f);
   }
   return circles[0];
 }
@@ -91,7 +91,7 @@ void find_particles(cv::InputArray &frame, cv::InputArray &mean,
   cv::multiply(diff, -1.f, diff);
 
   // median blur
-  cv::medianBlur(diff, diff, 3);
+  cv::medianBlur(diff, diff, 5);
 
   // sharpen
   if (unsharp_alpha > 0.0)
