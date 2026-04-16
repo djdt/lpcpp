@@ -45,7 +45,22 @@ bool write_particle_images(const std::vector<Particle> &particles,
   return false;
 }
 
-void read_filter_config(std::string path, filter_args &args) {
+void write_filter_config(const std::string &path, const filter_args &args) {
+  std::ofstream ofs(path);
+
+  ofs << "area " << args.min_area << " " << args.max_area << std::endl;
+  ofs << "aspect " << args.min_aspect << " " << args.max_aspect << std::endl;
+  ofs << "circularity " << args.min_circularity << " " << args.max_circularity
+      << std::endl;
+  ofs << "convexity " << args.min_convexity << " " << args.max_convexity
+      << std::endl;
+  ofs << "intensity " << args.min_intensity << " " << args.max_intensity
+      << std::endl;
+  ofs << "sharpness " << args.min_sharpness << " " << args.max_sharpness
+      << std::endl;
+}
+
+bool read_filter_config(const std::string &path, filter_args &args) {
   std::fstream ifs(path);
   std::string line;
   while (!ifs.eof()) {
@@ -65,7 +80,9 @@ void read_filter_config(std::string path, filter_args &args) {
     else if (line == "sharpness")
       ifs >> args.min_sharpness >> args.max_sharpness;
     else {
-      std::cout << "unknown filter value '" << line << "'" << std::endl;
+      std::cerr << "unknown filter value '" << line << "'" << std::endl;
+      return true;
     }
   }
+  return false;
 }

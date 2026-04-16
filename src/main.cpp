@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
       "background-frames", 1000,
       "number of background frames used to determine initial mean and std");
   int particle_frames =
-      parser.read("particle-frames", 40,
+      parser.read("particle-frames", 50,
                   "number of frames to track particles after last detection");
   double particle_distance = parser.read("particle-distance", 3.0,
                                          "minimum distance between particles");
@@ -38,14 +38,25 @@ int main(int argc, char *argv[]) {
       parser.read("export-images", false, "export images of particles");
   std::string config_path = parser.read<std::string>(
       "config", std::string(),
-      "path to filter config, with lines: 'VALUE MIN MAX'\n"
+      "path to filter config, with lines: '<value> <min> <max>'\n"
       "\tvalid values are: 'area', 'aspect', circularity', 'convexity', "
-      "'intensity', 'sharpness', 'radius'");
+      "'intensity', 'sharpness', 'radius'.\n"
+      "\tIf no file exists, a default config file is created.");
 
   filter_args particle_filter_args;
 
   if (!config_path.empty()) {
-    read_filter_config(config_path, particle_filter_args);
+    if (!std::filesystem::exists(config_path)) {
+      write_filter_config(config_path, particle_filter_args);
+      std::cout << "default config written to '" << config_path << "'"
+                << std::endl;
+      return 0;
+    }
+    if (read_filter_config(config_path, particle_filter_args)) {
+      std::cerr << "unable to read filter config '" << config_path << "'"
+                << std::endl;
+      return 1;
+    }
   }
 
   if (argc < 2 || !parser.success()) {
@@ -109,8 +120,10 @@ int main(int argc, char *argv[]) {
               << capillary[1] << " with radius " << capillary[2] << " px"
               << std::endl;
   }
-  cv::circle(mask, cv::Point(capillary[0], capillary[1]), capillary[2] * 0.9,
-             255, -1);
+  // shrink
+  capillary[2] *= 0.95;
+  cv::circle(mask, cv::Point(capillary[0], capillary[1]), capillary[2], 255,
+             -1);
 
   // setup arrays
   cv::UMat acc_mean;
@@ -172,6 +185,9 @@ int main(int argc, char *argv[]) {
       cv::UMat rgb_frame;
       draw_particles_on_frame(frame, rgb_frame, particles.rbegin(),
                               particles.rend(), particle_frames);
+      // draw capilary bounds
+      cv::circle(rgb_frame, cv::Point(capillary[0], capillary[1]), capillary[2],
+                 cv::Scalar(0, 255, 0), 1);
       cv::imshow("frame", rgb_frame);
 
       int key = cv::waitKey(50);

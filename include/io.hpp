@@ -14,7 +14,8 @@ void write_particle_data(const std::vector<Particle> &particles,
 bool write_particle_images(const std::vector<Particle> &particles,
                            const std::filesystem::path &output_dir);
 
-void read_filter_config(std::string path, filter_args &args);
+void write_filter_config(const std::string &path, const filter_args &args);
+bool read_filter_config(const std::string &path, filter_args &args);
 
 template <typename Iter>
 void draw_particles_on_frame(cv::InputArray &input,
