@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
       "config", std::string(),
       "path to filter config, with lines: 'VALUE MIN MAX'\n"
       "\tvalid values are: 'area', 'aspect', circularity', 'convexity', "
-      "'radius'");
+      "'intensity', 'sharpness', 'radius'");
 
   filter_args particle_filter_args;
 
