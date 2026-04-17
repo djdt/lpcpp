@@ -9,6 +9,7 @@ private:
   cv::Mat _image;
   cv::Mat _mask;
   cv::Rect _rect;
+  cv::RotatedRect _min_area_rect;
 
   int _id;
   int _frame;
@@ -21,24 +22,30 @@ public:
   Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
            int frame_number, int id);
 
+  const std::vector<cv::Point> &contour() const;
+  int frameNumber() const;
+  int frameCount() const;
+  int id() const;
+  const cv::Mat &image() const;
+
+  const std::vector<cv::Point> imageContour() const;
+
   double area() const;
   double aspect() const;
   cv::Point2f center() const;
-  const std::vector<cv::Point> &contour() const;
   const double centerWeightedIntensity() const;
+  const double circularEquvalentDiameter() const;
   double circularity() const;
   double convexity() const;
-  int frame_number() const;
-  int frame_count() const;
-  const cv::Mat &image() const;
-  const std::vector<cv::Point> imageContour() const;
   double intensity() const;
-  int id() const;
+  const double maximumWidth() const;
+  const double minimumWidth() const;
+  const double perimeter() const;
   double radius() const;
   double sharpness() const;
 
   void addFrame();
-  bool is_close(const Particle &b, double edge_distance = 0.0);
+  bool isClose(const Particle &b, double edge_distance = 0.0);
 };
 
 struct filter_args {

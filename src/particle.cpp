@@ -4,11 +4,12 @@
 #include <numbers>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#include <iostream>
 
 Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
                    int frame_number, int id)
     : _contour(contour), _frame(frame_number), _frame_count(1), _id(id) {
-  //
+  std::cout << id << std::endl;
   // moments for center and area
   _moments = cv::moments(_contour);
 
@@ -22,13 +23,15 @@ Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
   _mask = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
   cv::drawContours(_mask, {_contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
                    -_rect.tl());
+
+  _min_area_rect = cv::minAreaRect(_contour);
 };
 
 const std::vector<cv::Point> &Particle::contour() const { return _contour; }
 
-int Particle::frame_count() const { return _frame_count; }
+int Particle::frameCount() const { return _frame_count; }
 
-int Particle::frame_number() const { return _frame; }
+int Particle::frameNumber() const { return _frame; }
 
 const cv::Mat &Particle::image() const { return _image; }
 
@@ -38,8 +41,7 @@ int Particle::id() const { return _id; }
 double Particle::area() const { return _moments.m00; };
 
 double Particle::aspect() const {
-  cv::RotatedRect rect = cv::minAreaRect(_contour);
-  double aspect = rect.size.aspectRatio();
+  double aspect = _min_area_rect.size.aspectRatio();
   if (aspect > 1.0) {
     aspect = 1.0 / aspect;
   }
@@ -77,11 +79,30 @@ const double Particle::centerWeightedIntensity() const {
   return cv::sum(weights)[0];
 }
 
+const double Particle::circularEquvalentDiameter() const {
+  // moments.m00 = area()
+  return std::sqrt((4.0 * _moments.m00) / std::numbers::pi);
+}
+
 double Particle::intensity() const {
   cv::Mat intensity = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
   _image.copyTo(intensity, _mask);
   return cv::sum(intensity)[0];
 };
+
+const double Particle::maximumWidth() const {
+  // longest length of min area rect
+  return std::max(_min_area_rect.size.width, _min_area_rect.size.height);
+}
+
+const double Particle::minimumWidth() const {
+  // shortest length of min area rect
+  return std::min(_min_area_rect.size.width, _min_area_rect.size.height);
+}
+
+const double Particle::perimeter() const {
+  return cv::arcLength(_contour, true);
+}
 
 double Particle::radius() const {
   const cv::Point2f c = center();
@@ -102,7 +123,7 @@ double Particle::sharpness() const {
 void Particle::addFrame() { _frame_count++; }
 
 // Comparison
-bool Particle::is_close(const Particle &b, double edge_distance) {
+bool Particle::isClose(const Particle &b, double edge_distance) {
   return cv::norm(center() - b.center()) - radius() - b.radius() <
          edge_distance;
 };
@@ -176,7 +197,7 @@ void filter_existing_particles(
             for (auto it_new = new_particles.begin();
                  it_new != new_particles.end(); ++it_new) {
 
-              if (it_new->is_close(old, edge_distance)) {
+              if (it_new->isClose(old, edge_distance)) {
 
                 if (comparison(*it_new, old)) {
                   it_new->addFrame();

@@ -9,20 +9,34 @@
 #include "particle.hpp"
 
 void write_particle_header(std::ofstream &ofs) {
-  ofs << "id,frame,frame_count,area,aspect,circularity,convexity,intensity,"
-         "radius,sharpness,x,y"
+  ofs << "id,frame,frame_count,area,aspect,circular_equivalent_diameter,"
+         "circularity,convexity,intensity,maximum_width,minimum_width,"
+         "perimeter,radius,sharpness,x,y"
       << std::endl;
 }
+
 void write_particle_data(const std::vector<Particle> &particles,
                          std::ofstream &ofs) {
   for (auto it = particles.begin(); it != particles.end(); ++it) {
-    ofs << it->id() << "," << it->frame_number() << "," << it->frame_count()
-        << "," << it->area() << "," << it->aspect() << "," << it->circularity()
-        << "," << it->convexity() << "," << it->intensity() << ","
-        << it->radius() << "," << it->sharpness() << "," << it->center().x
-        << "," << it->center().y << std::endl;
+    ofs << it->id() << ",";
+    ofs << it->frameNumber() << ",";
+    ofs << it->frameCount() << ",";
+    ofs << it->area() << ",";
+    ofs << it->aspect() << ",";
+    ofs << it->circularEquvalentDiameter() << ",";
+    ofs << it->circularity() << ",";
+    ofs << it->convexity() << ",";
+    ofs << it->intensity() << ",";
+    ofs << it->maximumWidth() << ",";
+    ofs << it->minimumWidth() << ",";
+    ofs << it->perimeter() << ",";
+    ofs << it->radius() << ",";
+    ofs << it->sharpness() << ",";
+    ofs << it->center().y << ",";
+    ofs << it->center().x << std::endl;
   }
 }
+
 bool write_particle_images(const std::vector<Particle> &particles,
                            const std::filesystem::path &output_dir) {
   auto color = cv::Scalar(0, 0, 255);

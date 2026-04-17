@@ -98,7 +98,14 @@ int main(int argc, char *argv[]) {
   if (export_images) {
     std::filesystem::create_directory(image_dir);
   }
-  std::ofstream results_output(output_dir / "particles.csv", std::ios::out);
+
+  // just used for date
+  auto start_time = std::chrono::system_clock::now();
+
+  std::ofstream results_output(
+      output_dir /
+          (std::format("{0:%H}_{0:%M}_{0:%OS}", start_time) + "_particles.csv"),
+      std::ios::out);
   write_particle_header(results_output);
 
   // load a frame and find the ROI
@@ -143,7 +150,7 @@ int main(int argc, char *argv[]) {
   // reset the video
   int frame_pos = 0;
   cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
-  auto start_time = std::chrono::system_clock::now();
+  start_time = std::chrono::system_clock::now();
 
   // init the particle vars
   std::deque<std::vector<Particle>> particles;
