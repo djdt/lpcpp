@@ -56,6 +56,7 @@ void write_filter_config(const std::string &path, const filter_args &args) {
       << std::endl;
   ofs << "intensity " << args.min_intensity << " " << args.max_intensity
       << std::endl;
+  ofs << "radius " << args.min_radius << " " << args.max_radius << std::endl;
   ofs << "sharpness " << args.min_sharpness << " " << args.max_sharpness
       << std::endl;
 }
@@ -73,10 +74,10 @@ bool read_filter_config(const std::string &path, filter_args &args) {
       ifs >> args.min_circularity >> args.max_circularity;
     else if (line == "convexity")
       ifs >> args.min_convexity >> args.max_convexity;
-    else if (line == "radius")
-      ifs >> args.min_radius >> args.max_radius;
     else if (line == "intensity")
       ifs >> args.min_intensity >> args.max_intensity;
+    else if (line == "radius")
+      ifs >> args.min_radius >> args.max_radius;
     else if (line == "sharpness")
       ifs >> args.min_sharpness >> args.max_sharpness;
     else {

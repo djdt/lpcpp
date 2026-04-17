@@ -38,9 +38,9 @@ int main(int argc, char *argv[]) {
       parser.read("export-images", false, "export images of particles");
   std::string config_path = parser.read<std::string>(
       "config", std::string(),
-      "path to filter config, with lines: '<value> <min> <max>'\n"
-      "\tvalid values are: 'area', 'aspect', circularity', 'convexity', "
-      "'intensity', 'sharpness', 'radius'.\n"
+      "path to filter config, with lines: '<key> <min> <max>'\n"
+      "\tvalid keys are: 'area', 'aspect', circularity', 'convexity', "
+      "'intensity', 'radius', 'sharpness'.\n"
       "\tIf no file exists, a default config file is created.");
 
   filter_args particle_filter_args;
