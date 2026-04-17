@@ -4,12 +4,10 @@
 #include <numbers>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
-#include <iostream>
 
 Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
                    int frame_number, int id)
     : _contour(contour), _frame(frame_number), _frame_count(1), _id(id) {
-  std::cout << id << std::endl;
   // moments for center and area
   _moments = cv::moments(_contour);
 

@@ -11,8 +11,8 @@ private:
   cv::Rect _rect;
   cv::RotatedRect _min_area_rect;
 
-  const long _id;
-  const int _frame;
+  long _id;
+  int _frame;
   int _frame_count;
 
   cv::Moments _moments;
