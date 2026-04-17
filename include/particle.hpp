@@ -11,8 +11,8 @@ private:
   cv::Rect _rect;
   cv::RotatedRect _min_area_rect;
 
-  int _id;
-  int _frame;
+  const long _id;
+  const int _frame;
   int _frame_count;
 
   cv::Moments _moments;
@@ -23,9 +23,9 @@ public:
            int frame_number, int id);
 
   const std::vector<cv::Point> &contour() const;
-  int frameNumber() const;
+  const int frameNumber() const;
   int frameCount() const;
-  int id() const;
+  const long id() const;
   const cv::Mat &image() const;
 
   const std::vector<cv::Point> imageContour() const;

@@ -17,4 +17,4 @@ void find_particles(cv::InputArray &frame, cv::InputArray &mean,
                     cv::InputArray &var, const double zscore,
                     cv::InputArray &mask, const double unsharp_alpha,
                     std::vector<Particle> &particles, const int current_frame,
-                    int current_id);
+                    long &current_id);

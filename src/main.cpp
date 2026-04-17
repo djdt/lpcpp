@@ -154,7 +154,7 @@ int main(int argc, char *argv[]) {
 
   // init the particle vars
   std::deque<std::vector<Particle>> particles;
-  int particle_id = 0;
+  long particle_id = 0;
   int particle_count = 0;
 
   while (frame_pos++ < frame_count) {

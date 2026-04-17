@@ -31,11 +31,11 @@ const std::vector<cv::Point> &Particle::contour() const { return _contour; }
 
 int Particle::frameCount() const { return _frame_count; }
 
-int Particle::frameNumber() const { return _frame; }
+const int Particle::frameNumber() const { return _frame; }
 
 const cv::Mat &Particle::image() const { return _image; }
 
-int Particle::id() const { return _id; }
+const long Particle::id() const { return _id; }
 
 // Calculated
 double Particle::area() const { return _moments.m00; };
