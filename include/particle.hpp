@@ -48,7 +48,7 @@ public:
 
   void addFrame();
   void addRawImage(const cv::Mat &frame);
-  bool isClose(const Particle &b, double edge_distance = 0.0);
+  bool isClose(const Particle &b, const double edge_distance = 0.0);
 };
 
 struct filter_args {

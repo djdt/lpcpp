@@ -128,7 +128,7 @@ void Particle::addRawImage(const cv::Mat &frame) {
 }
 
 // Comparison
-bool Particle::isClose(const Particle &b, double edge_distance) {
+bool Particle::isClose(const Particle &b, const double edge_distance) {
   return cv::norm(center() - b.center()) - radius() - b.radius() <
          edge_distance;
 };
