@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
     if (export_images) {
       cv::Mat cpu_frame = frame.getMat(cv::ACCESS_READ);
       std::for_each(new_particles.begin(), new_particles.end(),
-                    [&cpu_frame](Particle &p) { p.addRawImage(cpu_frame); });
+                    [&cpu_frame](Particle &p) { p.setRawImage(cpu_frame); });
     }
     particles.push_back(new_particles);
 

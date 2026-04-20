@@ -123,7 +123,7 @@ double Particle::sharpness() const {
 
 void Particle::addFrame() { _frame_count++; }
 
-void Particle::addRawImage(const cv::Mat &frame) {
+void Particle::setRawImage(const cv::Mat &frame) {
   _image_raw = frame(_rect).clone();
 }
 

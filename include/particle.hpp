@@ -47,7 +47,7 @@ public:
   double sharpness() const;
 
   void addFrame();
-  void addRawImage(const cv::Mat &frame);
+  void setRawImage(const cv::Mat &frame);
   bool isClose(const Particle &b, const double edge_distance = 0.0);
 };
 
