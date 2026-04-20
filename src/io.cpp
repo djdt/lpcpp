@@ -42,16 +42,19 @@ bool write_particle_images(const std::vector<Particle> &particles,
   auto color = cv::Scalar(0, 0, 255);
   for (auto it = particles.begin(); it != particles.end(); ++it) {
     auto out = output_dir / std::to_string(it->id()).append(".png");
-    cv::Mat image;
+    cv::Mat image, raw_image;
     it->image().convertTo(image, CV_8U);
-    cv::Mat rgb = cv::Mat::zeros(image.rows, image.cols, CV_8UC3);
-    cv::insertChannel(image, rgb, 1);
+    it->rawImage().convertTo(raw_image, CV_8U);
+
+    cv::Mat bgr = cv::Mat::zeros(image.rows, image.cols, CV_8UC3);
+    cv::insertChannel(image, bgr, 1);
+    cv::insertChannel(raw_image, bgr, 0);
 
     cv::Mat fill = cv::Mat::zeros(image.rows, image.cols, CV_8U);
     // cv::polylines(rgb, it->imageContour(), -1, color, 1.0, 8);
     cv::fillPoly(fill, it->imageContour(), 255);
-    cv::insertChannel(fill, rgb, 2);
-    if (not cv::imwrite(out.string(), rgb)) {
+    cv::insertChannel(fill, bgr, 2);
+    if (not cv::imwrite(out.string(), bgr)) {
       std::cerr << "failed to save " << out << std::endl;
       return true;
     }

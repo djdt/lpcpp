@@ -185,6 +185,13 @@ int main(int argc, char *argv[]) {
           },
           particle_distance);
     }
+
+    // add a raw image to each particle, slow so only if images needed
+    if (export_images) {
+      cv::Mat cpu_frame = frame.getMat(cv::ACCESS_READ);
+      std::for_each(new_particles.begin(), new_particles.end(),
+                    [&cpu_frame](Particle &p) { p.addRawImage(cpu_frame); });
+    }
     particles.push_back(new_particles);
 
     // create a color image and draw the contuors

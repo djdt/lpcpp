@@ -7,6 +7,7 @@ class Particle {
 private:
   std::vector<cv::Point> _contour;
   cv::Mat _image;
+  cv::Mat _image_raw;
   cv::Mat _mask;
   cv::Rect _rect;
   cv::RotatedRect _min_area_rect;
@@ -27,6 +28,7 @@ public:
   int frameCount() const;
   const long id() const;
   const cv::Mat &image() const;
+  const cv::Mat &rawImage() const;
 
   const std::vector<cv::Point> imageContour() const;
 
@@ -45,6 +47,7 @@ public:
   double sharpness() const;
 
   void addFrame();
+  void addRawImage(const cv::Mat &frame);
   bool isClose(const Particle &b, double edge_distance = 0.0);
 };
 

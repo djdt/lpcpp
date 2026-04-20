@@ -111,7 +111,7 @@ void find_particles(cv::InputArray &frame, cv::InputArray &mean,
   cv::findContours(thresh, contours, cv::RETR_EXTERNAL,
                    cv::CHAIN_APPROX_SIMPLE);
 
-  cv::Mat cpu_diff = diff.getMat(cv::ACCESS_READ);
+  const cv::Mat cpu_diff = diff.getMat(cv::ACCESS_READ);
   particles.reserve(contours.size());
   std::transform(
       contours.begin(), contours.end(), std::back_inserter(particles),

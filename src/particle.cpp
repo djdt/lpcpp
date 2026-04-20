@@ -18,6 +18,7 @@ Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
   _rect &= cv::Rect(0, 0, frame.cols, frame.rows);
 
   _image = frame(_rect).clone();
+
   _mask = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
   cv::drawContours(_mask, {_contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
                    -_rect.tl());
@@ -31,9 +32,11 @@ int Particle::frameCount() const { return _frame_count; }
 
 const int Particle::frameNumber() const { return _frame; }
 
+const long Particle::id() const { return _id; }
+
 const cv::Mat &Particle::image() const { return _image; }
 
-const long Particle::id() const { return _id; }
+const cv::Mat &Particle::rawImage() const { return _image_raw; }
 
 // Calculated
 double Particle::area() const { return _moments.m00; };
@@ -119,6 +122,10 @@ double Particle::sharpness() const {
 }
 
 void Particle::addFrame() { _frame_count++; }
+
+void Particle::addRawImage(const cv::Mat &frame) {
+  _image_raw = frame(_rect).clone();
+}
 
 // Comparison
 bool Particle::isClose(const Particle &b, double edge_distance) {
