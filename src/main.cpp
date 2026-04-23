@@ -157,7 +157,7 @@ int main(int argc, char *argv[]) {
   long particle_id = 0;
   int particle_count = 0;
 
-  while (frame_pos++ < frame_count) {
+  while (frame_pos < frame_count) {
     cap.read(frame);
 
     // read in a new frame
@@ -238,6 +238,7 @@ int main(int argc, char *argv[]) {
                 << std::flush;
     }
 
+    frame_pos++;
   } // while
 
   // export any remaining particles
