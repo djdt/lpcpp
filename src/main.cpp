@@ -14,6 +14,10 @@
 #include "io.hpp"
 #include "util.hpp"
 
+#ifndef CMAKE_PROJECT_VERSION
+#define CMAKE_PROJECT_VERSION "0.0.0"
+#endif
+
 int main(int argc, char *argv[]) {
 
   // find and check parameters
@@ -61,6 +65,7 @@ int main(int argc, char *argv[]) {
 
   if (argc < 2 || !parser.success()) {
     std::cerr << "Usage: lpcpp FILE [options]" << std::endl;
+    std::cerr << "Version: " << CMAKE_PROJECT_VERSION << std::endl;
     std::cerr << "Options:" << std::endl;
     std::cerr << parser;
     return 1;

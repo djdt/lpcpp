@@ -8,6 +8,7 @@ set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_EXPORT_COMPILE_COMMANDS Yes)
 
+add_compile_definitions(CMAKE_PROJECT_VERSION="${CMAKE_PROJECT_VERSION}")
 
 file(GLOB lpcpp_SRC "src/*.cpp" "include/*.hpp")
 
