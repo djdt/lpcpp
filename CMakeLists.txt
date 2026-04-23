@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.27)
-project(lpcpp LANGUAGES CXX)
+project(lpcpp
+    VERSION 0.2.0
+    LANGUAGES CXX
+)
 set(CMAKE_BUILD_TYPE Release)
 
 set(CMAKE_CXX_STANDARD 23)
