@@ -157,6 +157,8 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         self.data = np.genfromtxt(path, names=True, delimiter=",")
 
+        self.label_count = QtWidgets.QLabel()
+
         self.chart_hist = HistogramChart()
         self.chart_hist.setLimits(
             0.0, self.data["radius"].max() * 2.0 * 0.46, 0.0, 100.0
@@ -199,8 +201,10 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             self.sliders[name].rangeChanged.connect(self.printControl)
 
         controls_layout = QtWidgets.QFormLayout()
+        controls_layout.addRow(self.label_count)
         for name, slider in self.sliders.items():
             controls_layout.addRow(name.replace("_", " ").title(), slider)
+
 
         controls_widget = QtWidgets.QWidget()
         controls_widget.setMinimumWidth(300)
@@ -215,7 +219,6 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, controls_dock)
 
         self.setCentralWidget(self.chart_hist)
-        # self.setStatusBar(self.status_bar)
 
         self.redraw()
 
@@ -231,6 +234,9 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         hist_range = 0.0, self.data["radius"].max()
 
         self.updateCanvasHistogram(data, hist_range)
+
+        self.label_count.setText(f"Particle count: {data.size}")
+
         data = data[
             np.logical_and(
                 data["radius"] >= self.chart_hist.xaxis.min(),
