@@ -6,7 +6,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from particle_explorer.colors import cividis
 from particle_explorer.charts import HistogramChart
-from particle_explorer.widgets import LabeledRangeSlider
+from particle_explorer.widgets import RangeSlider
 
 
 def array_to_image(array: np.ndarray) -> QtGui.QImage:
@@ -56,12 +56,104 @@ class ImageItem(QtWidgets.QGraphicsItem):
         painter.drawImage(self.rect, self.image)
 
 
+class ControlSlider(RangeSlider):
+    rangeChanged = QtCore.Signal(str, float, float)
+
+    def __init__(
+        self,
+        name: str,
+        scale: float = 1.0,
+        parent: QtWidgets.QWidget | None = None,
+    ):
+        super().__init__(parent)
+
+        self.name = name
+        self.scale = scale
+
+        self.valueChanged.connect(self._rangeChanged)
+        self.value2Changed.connect(self._rangeChanged)
+
+        self.action_min = QtGui.QAction("Set Minimum")
+        self.action_min.triggered.connect(self.dialogMinimum)
+        self.action_max = QtGui.QAction("Set Maximum")
+        self.action_max.triggered.connect(self.dialogMaximum)
+
+    def _scale(self, v: float, inverse: bool = False) -> float:
+        if inverse:
+            v = v / self.scale
+        else:
+            v = v * self.scale
+        if not np.isfinite(v):
+            v = 0.0
+        return v
+
+    def dialogMinimum(self):
+        val, ok = QtWidgets.QInputDialog.getDouble(
+            self,
+            "Set Minimum",
+            "Set Minimum",
+            self._scale(self.left()),
+            self._scale(self.minimum()),
+            self._scale(self.maximum()),
+        )
+        if ok:
+            self.setLeft(int(self._scale(val, True)))
+
+    def dialogMaximum(self):
+        val, ok = QtWidgets.QInputDialog.getDouble(
+            self,
+            "Set Maximum",
+            "Set Maximum",
+            self._scale(self.right()),
+            self._scale(self.minimum()),
+            self._scale(self.maximum()),
+        )
+        if ok:
+            self.setRight(int(self._scale(val, True)))
+
+    def _rangeChanged(self):
+        self.rangeChanged.emit(
+            self.name, self._scale(self.left()), self._scale(self.right())
+        )
+
+    def setRangeScaled(self, min: float, max: float):
+        super().setRange(int(self._scale(min, True)), int(self._scale(max, True)))
+
+    def setScaled(self, left: float, right: float):
+        super().setValues(int(self._scale(left, True)), int(self._scale(right, True)))
+
+    def scaled(self) -> tuple[float, float]:
+        return self._scale(self.left()), self._scale(self.right())
+
+    # def min(self) -> float:
+    #     return self.scaled(self.left())
+    #
+    # def max(self) -> float:
+    #     return self.scaled(self.right())
+
+    def contextMenuEvent(self, event: QtGui.QContextMenuEvent):
+        menu = QtWidgets.QMenu(self)
+        menu.addAction(self.action_min)
+        menu.addAction(self.action_max)
+        menu.popup(event.globalPos())
+
+
 class ExplorerWindow(QtWidgets.QMainWindow):
     CAMERA_SIZE = 2048, 1536
+    VALID_RANGES = {  # name : (min val, max val, scale)
+        "frame_count": (1, None, 1),
+        "area": (0, None, 1),
+        "aspect": (0, 1.0, 1e-2),
+        "circularity": (0, 1.0, 1e-2),
+        "convexity": (0, 1.0, 1e-2),
+        "intensity": (0, None, 1),
+        "x": (None, None, 1),
+        "y": (None, None, 1),
+    }
 
     def __init__(self, path: Path, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
-        self.resize(800, 600)
+        self.resize(1200, 800)
 
         self.data = np.genfromtxt(path, names=True, delimiter=",")
 
@@ -89,33 +181,26 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             self.image_cap.boundingRect(),
             QtCore.Qt.AspectRatioMode.KeepAspectRatioByExpanding,
         )
+        self.view_cap.scale(0.5, 0.5)
 
-        self.aspect = LabeledRangeSlider(scale=100)
-        self.aspect.setRange(0.0, 1.0)
-        self.aspect.setValues(0.0, 1.0)
+        self.status_bar = self.statusBar()
 
-        self.convexity = LabeledRangeSlider(scale=100)
-        self.convexity.setRange(0, 1)
-        self.convexity.setValues(0, 1)
+        self.sliders = {}
+        for name, (vmin, vmax, scale) in ExplorerWindow.VALID_RANGES.items():
+            if vmin is None:
+                vmin = self.data[name].min()
+            if vmax is None:
+                vmax = self.data[name].max()
 
-        self.circularity = LabeledRangeSlider(scale=100)
-        self.circularity.setRange(0, 1)
-        self.circularity.setValues(0, 1)
-
-        self.frame_count = LabeledRangeSlider()
-        self.frame_count.setRange(1, np.amax(self.data["frame_count"]))
-        self.frame_count.setValues(1, np.amax(self.data["frame_count"]))
-
-        self.aspect.rangeChanged.connect(self.redraw)
-        self.convexity.rangeChanged.connect(self.redraw)
-        self.circularity.rangeChanged.connect(self.redraw)
-        self.frame_count.rangeChanged.connect(self.redraw)
+            self.sliders[name] = ControlSlider(name, scale=scale)
+            self.sliders[name].setRangeScaled(vmin, vmax)
+            self.sliders[name].setScaled(vmin, vmax)
+            self.sliders[name].rangeChanged.connect(self.redraw)
+            self.sliders[name].rangeChanged.connect(self.printControl)
 
         controls_layout = QtWidgets.QFormLayout()
-        controls_layout.addRow("Aspect", self.aspect)
-        controls_layout.addRow("Convex.", self.convexity)
-        controls_layout.addRow("Circ.", self.circularity)
-        controls_layout.addRow("Frame #", self.frame_count)
+        for name, slider in self.sliders.items():
+            controls_layout.addRow(name.replace("_", " ").title(), slider)
 
         controls_widget = QtWidgets.QWidget()
         controls_widget.setMinimumWidth(300)
@@ -130,40 +215,26 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, controls_dock)
 
         self.setCentralWidget(self.chart_hist)
+        # self.setStatusBar(self.status_bar)
+
         self.redraw()
 
+    def printControl(self, name: str, min: float, max: float):
+        self.status_bar.showMessage(f"{name}: {min:.12g} - {max:.12g}")
+
     def redraw(self):
-        data = self.data[
-            np.logical_and(
-                self.data["aspect"] >= self.aspect.min(),
-                self.data["aspect"] <= self.aspect.max(),
-            )
-        ]
-        data = data[
-            np.logical_and(
-                data["convexity"] >= self.convexity.min(),
-                data["convexity"] <= self.convexity.max(),
-            )
-        ]
-        data = data[
-            np.logical_and(
-                data["circularity"] >= self.circularity.min(),
-                data["circularity"] <= self.circularity.max(),
-            )
-        ]
-        data = data[
-            np.logical_and(
-                data["frame_count"] >= self.frame_count.min(),
-                data["frame_count"] <= self.frame_count.max(),
-            )
-        ]
+        data = self.data
+        for name, slider in self.sliders.items():
+            vmin, vmax = slider.scaled()
+            data = data[np.logical_and(data[name] >= vmin, data[name] <= vmax)]
 
         hist_range = 0.0, self.data["radius"].max()
 
         self.updateCanvasHistogram(data, hist_range)
         data = data[
             np.logical_and(
-                data["radius"] >= self.chart_hist.xaxis.min(), data["radius"] <= self.chart_hist.xaxis.max()
+                data["radius"] >= self.chart_hist.xaxis.min(),
+                data["radius"] <= self.chart_hist.xaxis.max(),
             )
         ]
         self.updateCanvasCapillary(data)
@@ -184,7 +255,8 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             ),
         )
         vmin, vmax = 0.0, np.percentile(hist, 98)
-        hist = (np.clip(hist, vmin, vmax) - vmin) / (vmax - vmin)
+        if vmax != vmin:
+            hist = (np.clip(hist, vmin, vmax) - vmin) / (vmax - vmin)
 
         array = np.ascontiguousarray(hist * 255, dtype=np.uint8)
         image = QtGui.QImage(
