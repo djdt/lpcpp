@@ -66,7 +66,12 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.data = np.genfromtxt(path, names=True, delimiter=",")
 
         self.chart_hist = HistogramChart()
-        self.chart_hist.xaxis.setRange(0.0, self.data["radius"].max() * 2.0 * 0.46)
+        self.chart_hist.setLimits(
+            0.0, self.data["radius"].max() * 2.0 * 0.46, 0.0, 100.0
+        )
+        self.chart_hist.setRange(0.0, self.data["radius"].max() * 2.0 * 0.46)
+        self.chart_hist.xaxis.rangeChanged.connect(self.redraw)
+
         self.chart_hist.xaxis.setTitleText("Size (µm)")
 
         self.view_cap = QtWidgets.QGraphicsView()
@@ -80,7 +85,10 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         )
         self.view_cap.scene().addItem(self.image_cap)
         self.view_cap.setSceneRect(self.image_cap.boundingRect())
-        self.view_cap.fitInView(self.image_cap.boundingRect(), QtCore.Qt.AspectRatioMode.KeepAspectRatioByExpanding)
+        self.view_cap.fitInView(
+            self.image_cap.boundingRect(),
+            QtCore.Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        )
 
         self.aspect = LabeledRangeSlider(scale=100)
         self.aspect.setRange(0.0, 1.0)
@@ -152,8 +160,13 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         hist_range = 0.0, self.data["radius"].max()
 
-        self.updateCanvasCapillary(data)
         self.updateCanvasHistogram(data, hist_range)
+        data = data[
+            np.logical_and(
+                data["radius"] >= self.chart_hist.xaxis.min(), data["radius"] <= self.chart_hist.xaxis.max()
+            )
+        ]
+        self.updateCanvasCapillary(data)
 
     def updateCanvasHistogram(self, data: np.ndarray, xlim: tuple[float, float]):
         if data.size == 0:
