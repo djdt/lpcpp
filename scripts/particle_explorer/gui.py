@@ -176,20 +176,65 @@ class ScatterWidget(QtWidgets.QWidget):
         ys = data[self.combo_y.currentText()]
         self.chart.updateScatter(xs, ys)
 
-    # def filterData(self, data: np.ndarray) -> np.ndarray:
-    #     data = data[
-    #         np.logical_and(
-    #             data[self.combo_x.currentText()] >= self.chart.xaxis.min(),
-    #             data[self.combo_x.currentText()] <= self.chart.xaxis.max(),
-    #         )
-    #     ]
-    #     data = data[
-    #         np.logical_and(
-    #             data[self.combo_y.currentText()] >= self.chart.yaxis.min(),
-    #             data[self.combo_y.currentText()] <= self.chart.yaxis.max(),
-    #         )
-    #     ]
-    #     return data
+
+class CapillaryWidget(QtWidgets.QWidget):
+    def __init__(self, parent: QtWidgets.QWidget | None = None):
+        super().__init__(parent)
+
+        self.count = QtWidgets.QLabel()
+
+        self.view = QtWidgets.QGraphicsView()
+        self.view.setScene(QtWidgets.QGraphicsScene())
+
+        self.image = ImageItem(
+            QtGui.QImage(),
+            QtCore.QRectF(
+                0.0, 0.0, ExplorerWindow.CAMERA_SIZE[0], ExplorerWindow.CAMERA_SIZE[1]
+            ),
+        )
+        self.view.setFixedSize(
+            QtCore.QSize(
+                ExplorerWindow.CAMERA_SIZE[0] // 25 * 4 + 10,
+                ExplorerWindow.CAMERA_SIZE[1] // 25 * 4 + 10,
+            )
+        )
+        self.view.scene().addItem(self.image)
+        self.view.setSceneRect(self.image.boundingRect())
+        self.view.scale(4.0 / 25.0, 4.0 / 25.0)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.view, 1)
+        layout.addWidget(self.count, 0)
+
+        self.setLayout(layout)
+
+    def updateImage(self, data: np.ndarray):
+        hist, _, _ = np.histogram2d(
+            data["y"],
+            data["x"],
+            bins=(
+                np.arange(0, ExplorerWindow.CAMERA_SIZE[1], 25),
+                np.arange(0, ExplorerWindow.CAMERA_SIZE[0], 25),
+            ),
+        )
+        vmin, vmax = 0.0, np.percentile(hist, 98)
+        if vmax != vmin:
+            hist = (np.clip(hist, vmin, vmax) - vmin) / (vmax - vmin)
+
+        array = np.ascontiguousarray(hist * 255, dtype=np.uint8)
+        image = QtGui.QImage(
+            array.data,
+            array.shape[1],
+            array.shape[0],
+            array.strides[0],
+            QtGui.QImage.Format.Format_Indexed8,
+        )
+        image._array = array  # type: ignore
+        image.setColorTable(cividis)
+        image.setColorCount(len(cividis))
+
+        self.image.setImage(image)
+        self.count.setText(f"Particles: {data.size}")
 
 
 class ExplorerWindow(QtWidgets.QMainWindow):
@@ -252,24 +297,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         self.hist.cursorMoved.connect(self.printCursorPos)
 
-        self.view_cap = QtWidgets.QGraphicsView()
-        self.view_cap.setScene(QtWidgets.QGraphicsScene())
-
-        self.image_cap = ImageItem(
-            QtGui.QImage(),
-            QtCore.QRectF(
-                0.0, 0.0, ExplorerWindow.CAMERA_SIZE[0], ExplorerWindow.CAMERA_SIZE[1]
-            ),
-        )
-        self.view_cap.scene().addItem(self.image_cap)
-        self.view_cap.setSceneRect(self.image_cap.boundingRect())
-        self.view_cap.fitInView(
-            self.image_cap.boundingRect(),
-            QtCore.Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-        )
-        self.view_cap.scale(0.5, 0.5)
-
-        self.label_count = QtWidgets.QLabel()
+        self.capillary = CapillaryWidget()
 
         self.sliders = {}
         for name, (vmin, vmax, scale) in ExplorerWindow.VALID_RANGES.items():
@@ -289,7 +317,6 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.status_bar = self.statusBar()
 
         controls_layout = QtWidgets.QFormLayout()
-        controls_layout.addRow(self.label_count)
         for name, slider in self.sliders.items():
             controls_layout.addRow(name.replace("_", " ").title(), slider)
 
@@ -298,7 +325,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         controls_widget.setLayout(controls_layout)
 
         capillary_dock = QtWidgets.QDockWidget("Capillary")
-        capillary_dock.setWidget(self.view_cap)
+        capillary_dock.setWidget(self.capillary)
         self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, capillary_dock)
 
         controls_dock = QtWidgets.QDockWidget("Controls")
@@ -316,7 +343,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.tabifyDockWidget(scatter_dock, hist_dock)
 
         self.resizeDocks(
-            [controls_dock, hist_dock], [400, 800], QtCore.Qt.Orientation.Horizontal
+            [controls_dock, hist_dock], [350, 850], QtCore.Qt.Orientation.Horizontal
         )
 
         self.redrawAll()
@@ -363,7 +390,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
     def redrawCapillary(self):
         data = self.filteredData(hist=True, scatter=True)
-        self.updateCanvasCapillary(data)
+        self.capillary.updateImage(data)
 
     def redrawHistogram(self):
         data = self.filteredData(scatter=True)
@@ -372,30 +399,3 @@ class ExplorerWindow(QtWidgets.QMainWindow):
     def redrawScatter(self):
         data = self.filteredData(hist=True)
         self.scatter.updateScatter(data)
-
-    def updateCanvasCapillary(self, data: np.ndarray):
-        hist, _, _ = np.histogram2d(
-            data["y"],
-            data["x"],
-            bins=(
-                np.arange(0, ExplorerWindow.CAMERA_SIZE[1], 25),
-                np.arange(0, ExplorerWindow.CAMERA_SIZE[0], 25),
-            ),
-        )
-        vmin, vmax = 0.0, np.percentile(hist, 98)
-        if vmax != vmin:
-            hist = (np.clip(hist, vmin, vmax) - vmin) / (vmax - vmin)
-
-        array = np.ascontiguousarray(hist * 255, dtype=np.uint8)
-        image = QtGui.QImage(
-            array.data,
-            array.shape[1],
-            array.shape[0],
-            array.strides[0],
-            QtGui.QImage.Format.Format_Indexed8,
-        )
-        image._array = array  # type: ignore
-        image.setColorTable(cividis)
-        image.setColorCount(len(cividis))
-
-        self.image_cap.setImage(image)
