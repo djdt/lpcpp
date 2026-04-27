@@ -146,8 +146,6 @@ class ScatterWidget(QtWidgets.QWidget):
         assert data.dtype.names is not None
         super().__init__(parent)
         self.chart = ScatterChart()
-        self.chart.xaxis.rangeChanged.connect(self.updateRequested)
-
 
         self.combo_x = QtWidgets.QComboBox()
         self.combo_x.addItems(list(data.dtype.names))
@@ -176,25 +174,22 @@ class ScatterWidget(QtWidgets.QWidget):
     def updateScatter(self, data: np.ndarray):
         xs = data[self.combo_x.currentText()]
         ys = data[self.combo_y.currentText()]
-        self.chart.setRange(xs.min(), xs.max(), ys.min(), ys.max())
-        self.chart.xaxis.applyNiceNumbers()
-        self.chart.yaxis.applyNiceNumbers()
         self.chart.updateScatter(xs, ys)
 
-    def filterData(self, data: np.ndarray) -> np.ndarray:
-        data = data[
-            np.logical_and(
-                data[self.combo_x.currentText()] >= self.chart.xaxis.min(),
-                data[self.combo_x.currentText()] <= self.chart.xaxis.max(),
-            )
-        ]
-        data = data[
-            np.logical_and(
-                data[self.combo_y.currentText()] >= self.chart.yaxis.min(),
-                data[self.combo_y.currentText()] <= self.chart.yaxis.max(),
-            )
-        ]
-        return data
+    # def filterData(self, data: np.ndarray) -> np.ndarray:
+    #     data = data[
+    #         np.logical_and(
+    #             data[self.combo_x.currentText()] >= self.chart.xaxis.min(),
+    #             data[self.combo_x.currentText()] <= self.chart.xaxis.max(),
+    #         )
+    #     ]
+    #     data = data[
+    #         np.logical_and(
+    #             data[self.combo_y.currentText()] >= self.chart.yaxis.min(),
+    #             data[self.combo_y.currentText()] <= self.chart.yaxis.max(),
+    #         )
+    #     ]
+    #     return data
 
 
 class ExplorerWindow(QtWidgets.QMainWindow):
@@ -241,15 +236,19 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         assert self.data.dtype.names is not None
 
         self.scatter = ScatterWidget(self.data)
-        self.scatter.updateRequested.connect(self.redraw)
+        self.scatter.updateRequested.connect(self.redrawScatter)
+        self.scatter.updateRequested.connect(self.redrawCapillary)
 
         self.hist = HistogramChart()
-        self.hist.setLimits(0.0, self.data["radius"].max(), 0.0, 100.0)
-        self.hist.setRange(0.0, self.data["radius"].max())
-        self.hist.xaxis.setTitleText("Size (µm)")
+        self.hist.setLimits(
+            xMin=0.0, xMax=self.data["radius"].max(), yMin=0.0, yMax=100.0
+        )
+        self.hist.region.setRegion(np.percentile(self.data["radius"], [1, 99]))
+        self.hist.region.setBounds((0.0, self.data["radius"].max()))
+        self.hist.region.sigRegionChangeFinished.connect(self.redrawCapillary)
+        self.hist.region.sigRegionChangeFinished.connect(self.redrawScatter)
 
-        self.hist.xaxis.rangeChanged.connect(self.redraw)
-        self.hist.cursorPositionChanged.connect(self.printCursorPos)
+        self.hist.sigSceneMouseMoved.connect(self.printCursorPos)
 
         self.view_cap = QtWidgets.QGraphicsView()
         self.view_cap.setScene(QtWidgets.QGraphicsScene())
@@ -282,7 +281,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             self.sliders[name] = ControlSlider(name, scale=scale)
             self.sliders[name].setRangeScaled(vmin, vmax)
             self.sliders[name].setScaled(vmin, vmax)
-            self.sliders[name].rangeChanged.connect(self.redraw)
+            self.sliders[name].rangeChanged.connect(self.redrawAll)
             self.sliders[name].rangeChanged.connect(self.printControl)
 
         self.status_bar = self.statusBar()
@@ -318,34 +317,43 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             [controls_dock, hist_dock], [400, 800], QtCore.Qt.Orientation.Horizontal
         )
 
-        self.redraw()
+        self.redrawAll()
 
     def printControl(self, name: str, min: float, max: float):
         self.status_bar.showMessage(f"{name}: {min:.12g} - {max:.12g}")
 
-    def printCursorPos(self, x: float, y: float):
-        self.status_bar.showMessage(f"{x:.4g}, {y:.4g}")
+    def printCursorPos(self, p: QtCore.QPointF):
+        self.status_bar.showMessage(f"{p.x():.4g}, {p.y():.4g}")
 
-    def redraw(self):
+    def filteredData(self, hist: bool = False, scatter: bool = False) -> np.ndarray:
         data = self.data
         for name, slider in self.sliders.items():
             vmin, vmax = slider.scaled()
             data = data[np.logical_and(data[name] >= vmin, data[name] <= vmax)]
 
-        # data = self.scatter.filterData(data)
+        if hist:
+            hist_min, hist_max = self.hist.region.getRegion()
+            data = data[
+                np.logical_and(data["radius"] >= hist_min, data["radius"] <= hist_max)
+            ]
+        return data
+
+    def redrawAll(self):
+        self.redrawHistogram()
+        self.redrawCapillary()
+        self.redrawScatter()
+
+    def redrawCapillary(self):
+        data = self.filteredData(hist=True)
+        self.updateCanvasCapillary(data)
+
+    def redrawHistogram(self):
+        data = self.filteredData(scatter=True)
         self.hist.updateHistogram(data["radius"], bins=100)
 
-        self.label_count.setText(f"Particle count: {data.size}")
-
-        data = data[
-            np.logical_and(
-                data["radius"] >= self.hist.xaxis.min(),
-                data["radius"] <= self.hist.xaxis.max(),
-            )
-        ]
-
+    def redrawScatter(self):
+        data = self.filteredData(hist=True)
         self.scatter.updateScatter(data)
-        self.updateCanvasCapillary(data)
 
     def updateCanvasCapillary(self, data: np.ndarray):
         hist, _, _ = np.histogram2d(

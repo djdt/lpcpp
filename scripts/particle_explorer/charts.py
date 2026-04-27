@@ -1,174 +1,142 @@
 from PySide6 import QtCore, QtGui, QtWidgets
-from PySide6 import QtCharts
 
 import numpy as np
 
 from particle_explorer.colors import cividis
 
+import pyqtgraph
 #
-# class NiceValueAxis(QtCharts.QValueAxis):
-#     """A chart axis that uses easy to read tick intervals.
+# class BaseChart(QtCharts.QChartView):
+#     cursorPositionChanged = QtCore.Signal(float, float)
 #
-#     Uses *at least* 'nticks' ticks, may be more.
+#     """QChartView with basic mouse naviagtion and styling.
+#
+#     Valid keys for 'theme' are "background", "axis", "grid", "title", "text".
+#     A context menu implements copying the chart to the system clipboard and reseting the chart view.
+#
+#     Args:
+#         chart: chart to display
+#         theme: dict of theme keys and colors
+#         allow_navigation: use mouse navigation
+#         parent: parent widget
 #     """
 #
-#     nicenums = [1.0, 1.5, 2.0, 2.5, 3.0, 5.0, 7.5]
+#     def __init__(
+#         self,
+#         chart: QtCharts.QChart,
+#         parent: QtWidgets.QWidget | None = None,
+#     ):
+#         # chart.setBackgroundBrush(QtGui.QBrush(self.theme["background"]))
+#         # chart.setBackgroundPen(QtGui.QPen(self.theme["background"]))
+#         super().__init__(chart, parent)
 #
-#     def __init__(self, nticks: int = 6, parent: QtCore.QObject | None = None):
-#         super().__init__(parent)
-#         self.nticks = nticks
+#         self.xaxis = QtCharts.QValueAxis()
+#         self.yaxis = QtCharts.QValueAxis()
 #
-#         self.setLabelFormat("%.4g")
-#         self.setTickType(QtCharts.QValueAxis.TickType.TicksDynamic)
-#         self.setTickAnchor(0.0)
-#         self.setTickInterval(1e3)
+#         self.chart().legend().setVisible(False)
 #
-#     def setRange(self, amin: float, amax: float) -> None:
-#         self.fixValues(amin, amax)
-#         super().setRange(amin, amax)
+#         self.limits = (0.0, 1.0, 0.0, 1.0)
 #
-#     def fixValues(self, amin: float, amax: float) -> None:
-#         delta = amax - amin
+#         self.chart().addAxis(self.xaxis, QtCore.Qt.AlignmentFlag.AlignBottom)
+#         self.chart().addAxis(self.yaxis, QtCore.Qt.AlignmentFlag.AlignLeft)
 #
-#         interval = delta / self.nticks
-#         pwr = 10 ** int(np.log10(interval) - (1 if interval < 1.0 else 0))
-#         interval = interval / pwr
+#     def setRange(
+#         self,
+#         xmin: float | None = None,
+#         xmax: float | None = None,
+#         ymin: float | None = None,
+#         ymax: float | None = None,
+#     ):
+#         if xmin is not None or xmax is not None:
+#             self.xaxis.setRange(xmin or self.xaxis.min(), xmax or self.xaxis.max())
+#         if ymin is not None or ymax is not None:
+#             self.yaxis.setRange(ymin or self.yaxis.min(), ymax or self.yaxis.max())
+#         self.chart().update()
 #
-#         idx = np.searchsorted(NiceValueAxis.nicenums, interval)
-#         idx = min(idx, len(NiceValueAxis.nicenums) - 1)
+#     def setLimits(
+#         self,
+#         xmin: float | None = None,
+#         xmax: float | None = None,
+#         ymin: float | None = None,
+#         ymax: float | None = None,
+#     ):
+#         self.limits = (
+#             xmin or self.limits[0],
+#             xmax or self.limits[1],
+#             ymin or self.limits[2],
+#             ymax or self.limits[3],
+#         )
 #
-#         interval = NiceValueAxis.nicenums[idx] * pwr
-#         anchor = int(amin / interval) * interval
+#     def mouseMoveEvent(self, event: QtGui.QMouseEvent):
+#         super().mouseMoveEvent(event)
+#         pos = self.chart().mapToValue(event.position())
+#         self.cursorPositionChanged.emit(pos.x(), pos.y())
 #
-#         self.setTickAnchor(anchor)
-#         self.setTickInterval(interval)
+#     def contextMenuEvent(self, event: QtGui.QContextMenuEvent) -> None:
+#         action_copy_image = QtGui.QAction(
+#             QtGui.QIcon.fromTheme("insert-image"), "Copy To Clipboard", self
+#         )
+#         action_copy_image.setStatusTip("Copy the graphics view to the clipboard.")
+#         action_copy_image.triggered.connect(self.copyToClipboard)
+#
+#         action_reset_zoom = QtGui.QAction(
+#             QtGui.QIcon.fromTheme("zoom-original"), "Reset Zoom", self
+#         )
+#         action_reset_zoom.setStatusTip("Reset the chart to the orignal view.")
+#         action_reset_zoom.triggered.connect(self.chart().zoomReset)
+#
+#         menu = QtWidgets.QMenu(self)
+#         menu.addAction(action_copy_image)
+#         menu.addAction(action_reset_zoom)
+#         menu.popup(event.globalPos())
+#
+#     def copyToClipboard(self) -> None:
+#         """Copy image of the current chart to the system clipboard."""
+#         QtWidgets.QApplication.clipboard().setPixmap(self.grab(self.viewport().rect()))
 
 
-class ValueAxis(QtCharts.QValueAxis):
-    def __init__(
-        self, limits: tuple[float, float], parent: QtWidgets.QWidget | None = None
-    ):
-        super().__init__(parent)
+class BaseChart(pyqtgraph.PlotWidget):
+    cursorMoved = QtCore.Signal(QtCore.QPointF)
 
-        self.limits = limits
+    def __init__(self, parent: QtWidgets.QWidget | None = None):
+        super().__init__(parent=parent, background="white")
 
-        self.rangeChanged.connect(self.limitRange)
+        self.xaxis = pyqtgraph.AxisItem("bottom")
+        # self.xaxis.setLabel(xlabel, units=xunits)
 
-    def limitRange(self):
-        if self.min() < self.limits[0]:
-            self.setMin(self.limits[0])
-        if self.max() > self.limits[1]:
-            self.setMax(self.limits[1])
+        self.yaxis = pyqtgraph.AxisItem("left")
+        # self.yaxis.setLabel(ylabel, units=yunits)
 
-
-class BaseChart(QtCharts.QChartView):
-    cursorPositionChanged = QtCore.Signal(float, float)
-
-    """QChartView with basic mouse naviagtion and styling.
-
-    Valid keys for 'theme' are "background", "axis", "grid", "title", "text".
-    A context menu implements copying the chart to the system clipboard and reseting the chart view.
-
-    Args:
-        chart: chart to display
-        theme: dict of theme keys and colors
-        allow_navigation: use mouse navigation
-        parent: parent widget
-    """
-
-    def __init__(
-        self,
-        chart: QtCharts.QChart,
-        parent: QtWidgets.QWidget | None = None,
-    ):
-        # chart.setBackgroundBrush(QtGui.QBrush(self.theme["background"]))
-        # chart.setBackgroundPen(QtGui.QPen(self.theme["background"]))
-        super().__init__(chart, parent)
-
-        self.xaxis = QtCharts.QValueAxis()
-        self.yaxis = QtCharts.QValueAxis()
-
-        self.chart().legend().setVisible(False)
-
-        self.limits = (0.0, 1.0, 0.0, 1.0)
-
-        self.chart().addAxis(self.xaxis, QtCore.Qt.AlignmentFlag.AlignBottom)
-        self.chart().addAxis(self.yaxis, QtCore.Qt.AlignmentFlag.AlignLeft)
-
-    def setRange(
-        self,
-        xmin: float | None = None,
-        xmax: float | None = None,
-        ymin: float | None = None,
-        ymax: float | None = None,
-    ):
-        if xmin is not None or xmax is not None:
-            self.xaxis.setRange(xmin or self.xaxis.min(), xmax or self.xaxis.max())
-        if ymin is not None or ymax is not None:
-            self.yaxis.setRange(ymin or self.yaxis.min(), ymax or self.yaxis.max())
-        self.chart().update()
-
-    def setLimits(
-        self,
-        xmin: float | None = None,
-        xmax: float | None = None,
-        ymin: float | None = None,
-        ymax: float | None = None,
-    ):
-        self.limits = (
-            xmin or self.limits[0],
-            xmax or self.limits[1],
-            ymin or self.limits[2],
-            ymax or self.limits[3],
-        )
-
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent):
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent):  # type: ignore
+        self.cursorMoved.emit(self.mapToScene(event.position().toPoint()))
         super().mouseMoveEvent(event)
-        pos = self.chart().mapToValue(event.position())
-        self.cursorPositionChanged.emit(pos.x(), pos.y())
-
-    def contextMenuEvent(self, event: QtGui.QContextMenuEvent) -> None:
-        action_copy_image = QtGui.QAction(
-            QtGui.QIcon.fromTheme("insert-image"), "Copy To Clipboard", self
-        )
-        action_copy_image.setStatusTip("Copy the graphics view to the clipboard.")
-        action_copy_image.triggered.connect(self.copyToClipboard)
-
-        action_reset_zoom = QtGui.QAction(
-            QtGui.QIcon.fromTheme("zoom-original"), "Reset Zoom", self
-        )
-        action_reset_zoom.setStatusTip("Reset the chart to the orignal view.")
-        action_reset_zoom.triggered.connect(self.chart().zoomReset)
-
-        menu = QtWidgets.QMenu(self)
-        menu.addAction(action_copy_image)
-        menu.addAction(action_reset_zoom)
-        menu.popup(event.globalPos())
-
-    def copyToClipboard(self) -> None:
-        """Copy image of the current chart to the system clipboard."""
-        QtWidgets.QApplication.clipboard().setPixmap(self.grab(self.viewport().rect()))
 
 
 class HistogramChart(BaseChart):
     def __init__(self, parent: QtWidgets.QWidget | None = None):
-        super().__init__(QtCharts.QChart(), parent=parent)
+        super().__init__(parent=parent)
 
-        self.setRubberBand(QtCharts.QChartView.RubberBand.HorizontalRubberBand)
+        self.enableAutoRange(y=True)
 
-        self._top_series = QtCharts.QLineSeries()
-        self._bottom_series = QtCharts.QLineSeries()
+        brush = QtGui.QBrush(cividis[64])
+        self.series = pyqtgraph.PlotCurveItem(
+            x=[0, 0],
+            y=[0],
+            stepMode="center",
+            fillLevel=0,
+            fillOutline=True,
+            brush=brush,
+            skipFiniteCheck=True,
+        )
+        self.addItem(self.series)
 
-        pen = QtGui.QPen(QtCore.Qt.GlobalColor.black, 1)
-        pen.setCosmetic(True)
-
-        self.series = QtCharts.QAreaSeries(self._top_series, self._bottom_series)
-        self.series.setPen(pen)
-        self.series.setBrush(QtGui.QBrush(cividis[64]))
-
-        self.chart().addSeries(self.series)
-        self.series.attachAxis(self.xaxis)
-        self.series.attachAxis(self.yaxis)
+        self.region = pyqtgraph.LinearRegionItem(
+            (0.0, 1.0),
+            pen=QtGui.QPen(QtCore.Qt.GlobalColor.black, 0),
+            brush=QtGui.QBrush(QtCore.Qt.BrushStyle.NoBrush),
+            hoverBrush=QtGui.QBrush(QtGui.QColor(255, 0, 0, 32)),
+        )
+        self.addItem(self.region)
 
     def updateHistogram(
         self,
@@ -179,50 +147,20 @@ class HistogramChart(BaseChart):
     ):
         counts, edges = np.histogram(data, bins=bins, density=density)  # type: ignore
 
-        if scale_yaxis:
-            self.setLimits(ymax=counts.max() * 1.05)
-            self.setRange(ymax=counts.max() * 1.05)
-
-        xs = np.repeat(edges.astype(np.float64), 2)
-        ys = np.concatenate(([0.0], np.repeat(counts, 2), [0.0])).astype(np.float64)
-
-        self._top_series.replaceNp(xs, ys)  # type: ignore
+        self.series.setData(y=counts, x=edges)
+        self.setLimits(yMax=counts.max() * 1.1)
+        self.autoRange()
 
 
 class ScatterChart(BaseChart):
     def __init__(self, parent: QtWidgets.QWidget | None = None):
-        super().__init__(QtCharts.QChart(), parent=parent)
+        super().__init__(parent=parent)
 
-        self.setRubberBand(QtCharts.QChartView.RubberBand.RectangleRubberBand)
-
-        self.series = QtCharts.QScatterSeries()
-        self.series.setColor(QtCore.Qt.GlobalColor.black)
-        self.series.setSelectedColor(QtGui.QColor(QtCore.Qt.GlobalColor.red))
-        self.series.setMarkerSize(3)
-        self.series.setUseOpenGL(True)
-        self.chart().addSeries(self.series)
-        self.series.attachAxis(self.xaxis)
-        self.series.attachAxis(self.yaxis)
+        self.series = pyqtgraph.ScatterPlotItem(
+            size=5, symbol="o", pen=QtGui.QPen(QtCore.Qt.GlobalColor.black, 0)
+        )
+        self.addItem(self.series)
 
     def updateScatter(self, xs: np.ndarray, ys: np.ndarray):
-        self.series.replaceNp(xs.astype(np.float64), ys.astype(np.float64))  # type: ignore
-
-    # def mousePressEvent(self, event:QtGui.QMouseEvent):
-    #     self.drag_start = self.chart().mapToValue(event.position())
-    #     super().mousePressEvent(event)
-    #
-    # def mouseReleaseEvent(self, event:QtGui.QMouseEvent):
-    #     drag_end = self.chart().mapToValue(event.position())
-    #
-    #     rect = QtCore.QRectF(self.drag_start, drag_end)
-    #
-    #     for i, point in enumerate(self.series.points()):
-    #         if rect.contains(point):
-    #             self.series.selectPoint(i)
-    #     #         selected.append(i)
-    #     #
-    #     # self.series.selectPoints(selected)
-    #     self.update()
-    #     print(self.series.selectedPoints())
-    #
-    #     super().mouseReleaseEvent(event)
+        self.series.setData(x=xs, y=ys)
+        self.setLimits(xMin=xs.min(), xMax=xs.max(), yMin=ys.min(), yMax=ys.max())
