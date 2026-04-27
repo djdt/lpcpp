@@ -1,11 +1,12 @@
 import numpy as np
+import numpy.lib.recfunctions as rfn
 
 from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from particle_explorer.colors import cividis
-from particle_explorer.charts import HistogramChart
+from particle_explorer.charts import HistogramChart, ScatterChart
 from particle_explorer.widgets import RangeSlider
 
 
@@ -138,6 +139,64 @@ class ControlSlider(RangeSlider):
         menu.popup(event.globalPos())
 
 
+class ScatterWidget(QtWidgets.QWidget):
+    updateRequested = QtCore.Signal()
+
+    def __init__(self, data: np.ndarray, parent: QtWidgets.QWidget | None = None):
+        assert data.dtype.names is not None
+        super().__init__(parent)
+        self.chart = ScatterChart()
+        self.chart.xaxis.rangeChanged.connect(self.updateRequested)
+
+
+        self.combo_x = QtWidgets.QComboBox()
+        self.combo_x.addItems(list(data.dtype.names))
+        self.combo_y = QtWidgets.QComboBox()
+        self.combo_y.addItems(list(data.dtype.names))
+        self.combo_y.setCurrentIndex(1)
+
+        self.combo_x.currentIndexChanged.connect(self.updateRequested)
+        self.combo_y.currentIndexChanged.connect(self.updateRequested)
+
+        layout_combo = QtWidgets.QHBoxLayout()
+        layout_combo.addWidget(
+            QtWidgets.QLabel("x:"), 0, QtCore.Qt.AlignmentFlag.AlignRight
+        )
+        layout_combo.addWidget(self.combo_x, 1)
+        layout_combo.addWidget(
+            QtWidgets.QLabel("y:"), 0, QtCore.Qt.AlignmentFlag.AlignRight
+        )
+        layout_combo.addWidget(self.combo_y, 1)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.chart, 1)
+        layout.addLayout(layout_combo, 0)
+        self.setLayout(layout)
+
+    def updateScatter(self, data: np.ndarray):
+        xs = data[self.combo_x.currentText()]
+        ys = data[self.combo_y.currentText()]
+        self.chart.setRange(xs.min(), xs.max(), ys.min(), ys.max())
+        self.chart.xaxis.applyNiceNumbers()
+        self.chart.yaxis.applyNiceNumbers()
+        self.chart.updateScatter(xs, ys)
+
+    def filterData(self, data: np.ndarray) -> np.ndarray:
+        data = data[
+            np.logical_and(
+                data[self.combo_x.currentText()] >= self.chart.xaxis.min(),
+                data[self.combo_x.currentText()] <= self.chart.xaxis.max(),
+            )
+        ]
+        data = data[
+            np.logical_and(
+                data[self.combo_y.currentText()] >= self.chart.yaxis.min(),
+                data[self.combo_y.currentText()] <= self.chart.yaxis.max(),
+            )
+        ]
+        return data
+
+
 class ExplorerWindow(QtWidgets.QMainWindow):
     CAMERA_SIZE = 2048, 1536
     VALID_RANGES = {  # name : (min val, max val, scale)
@@ -146,9 +205,20 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         "aspect": (0, 1.0, 1e-2),
         "circularity": (0, 1.0, 1e-2),
         "convexity": (0, 1.0, 1e-2),
+        "solidity": (0, 1.0, 1e-2),
         "intensity": (0, None, 1),
+        "sharpness": (0, None, 1),
         "x": (None, None, 1),
         "y": (None, None, 1),
+    }
+    REMAP_NAMES = {
+        "circularity_1": "circularity",
+        "convexity_1": "covexity",
+        "solidity_1": "solidity",
+        "particle_diameter_aspect_ratios_1": "aspect",
+        "centroid_position_row_pix": "y",
+        "centroid_position_column_pix": "x",
+        "largest_feret_diameters_µm": "radius",
     }
 
     def __init__(self, path: Path, parent: QtWidgets.QWidget | None = None):
@@ -156,17 +226,30 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.resize(1200, 800)
 
         self.data = np.genfromtxt(path, names=True, delimiter=",")
+        assert self.data.dtype.names is not None
 
-        self.label_count = QtWidgets.QLabel()
+        # fixes for specific inputs
+        if "particle_diameter_aspect_ratios_1" in self.data.dtype.names:
+            self.data["particle_diameter_aspect_ratios_1"] = (
+                1.0 / self.data["particle_diameter_aspect_ratios_1"]
+            )
+        if "radius" in self.data.dtype.names:  # radius in pixels
+            self.data["radius"] *= 2.0 * 0.46
 
-        self.chart_hist = HistogramChart()
-        self.chart_hist.setLimits(
-            0.0, self.data["radius"].max() * 2.0 * 0.46, 0.0, 100.0
-        )
-        self.chart_hist.setRange(0.0, self.data["radius"].max() * 2.0 * 0.46)
-        self.chart_hist.xaxis.rangeChanged.connect(self.redraw)
+        # convert to simple form
+        self.data = rfn.rename_fields(self.data, ExplorerWindow.REMAP_NAMES)
+        assert self.data.dtype.names is not None
 
-        self.chart_hist.xaxis.setTitleText("Size (µm)")
+        self.scatter = ScatterWidget(self.data)
+        self.scatter.updateRequested.connect(self.redraw)
+
+        self.hist = HistogramChart()
+        self.hist.setLimits(0.0, self.data["radius"].max(), 0.0, 100.0)
+        self.hist.setRange(0.0, self.data["radius"].max())
+        self.hist.xaxis.setTitleText("Size (µm)")
+
+        self.hist.xaxis.rangeChanged.connect(self.redraw)
+        self.hist.cursorPositionChanged.connect(self.printCursorPos)
 
         self.view_cap = QtWidgets.QGraphicsView()
         self.view_cap.setScene(QtWidgets.QGraphicsScene())
@@ -185,10 +268,12 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         )
         self.view_cap.scale(0.5, 0.5)
 
-        self.status_bar = self.statusBar()
+        self.label_count = QtWidgets.QLabel()
 
         self.sliders = {}
         for name, (vmin, vmax, scale) in ExplorerWindow.VALID_RANGES.items():
+            if name not in self.data.dtype.names:
+                continue
             if vmin is None:
                 vmin = self.data[name].min()
             if vmax is None:
@@ -200,30 +285,46 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             self.sliders[name].rangeChanged.connect(self.redraw)
             self.sliders[name].rangeChanged.connect(self.printControl)
 
+        self.status_bar = self.statusBar()
+
         controls_layout = QtWidgets.QFormLayout()
         controls_layout.addRow(self.label_count)
         for name, slider in self.sliders.items():
             controls_layout.addRow(name.replace("_", " ").title(), slider)
 
-
         controls_widget = QtWidgets.QWidget()
         controls_widget.setMinimumWidth(300)
         controls_widget.setLayout(controls_layout)
 
-        capillary_dock = QtWidgets.QDockWidget()
+        capillary_dock = QtWidgets.QDockWidget("Capillary")
         capillary_dock.setWidget(self.view_cap)
         self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, capillary_dock)
 
-        controls_dock = QtWidgets.QDockWidget()
+        controls_dock = QtWidgets.QDockWidget("Controls")
         controls_dock.setWidget(controls_widget)
         self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, controls_dock)
 
-        self.setCentralWidget(self.chart_hist)
+        hist_dock = QtWidgets.QDockWidget("Histogram")
+        hist_dock.setWidget(self.hist)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, hist_dock)
+
+        scatter_dock = QtWidgets.QDockWidget("Scatter")
+        scatter_dock.setWidget(self.scatter)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, scatter_dock)
+
+        self.tabifyDockWidget(scatter_dock, hist_dock)
+
+        self.resizeDocks(
+            [controls_dock, hist_dock], [400, 800], QtCore.Qt.Orientation.Horizontal
+        )
 
         self.redraw()
 
     def printControl(self, name: str, min: float, max: float):
         self.status_bar.showMessage(f"{name}: {min:.12g} - {max:.12g}")
+
+    def printCursorPos(self, x: float, y: float):
+        self.status_bar.showMessage(f"{x:.4g}, {y:.4g}")
 
     def redraw(self):
         data = self.data
@@ -231,25 +332,20 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             vmin, vmax = slider.scaled()
             data = data[np.logical_and(data[name] >= vmin, data[name] <= vmax)]
 
-        hist_range = 0.0, self.data["radius"].max()
-
-        self.updateCanvasHistogram(data, hist_range)
+        # data = self.scatter.filterData(data)
+        self.hist.updateHistogram(data["radius"], bins=100)
 
         self.label_count.setText(f"Particle count: {data.size}")
 
         data = data[
             np.logical_and(
-                data["radius"] >= self.chart_hist.xaxis.min(),
-                data["radius"] <= self.chart_hist.xaxis.max(),
+                data["radius"] >= self.hist.xaxis.min(),
+                data["radius"] <= self.hist.xaxis.max(),
             )
         ]
+
+        self.scatter.updateScatter(data)
         self.updateCanvasCapillary(data)
-
-    def updateCanvasHistogram(self, data: np.ndarray, xlim: tuple[float, float]):
-        if data.size == 0:
-            return
-
-        self.chart_hist.updateHistogram(data["radius"] * 2.0 * 0.46, bins=100)
 
     def updateCanvasCapillary(self, data: np.ndarray):
         hist, _, _ = np.histogram2d(
