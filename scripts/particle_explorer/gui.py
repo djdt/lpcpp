@@ -236,6 +236,8 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         assert self.data.dtype.names is not None
 
         self.scatter = ScatterWidget(self.data)
+        self.scatter.chart.roi.sigRegionChangeFinished.connect(self.redrawCapillary)
+        self.scatter.chart.roi.sigRegionChangeFinished.connect(self.redrawHistogram)
         self.scatter.updateRequested.connect(self.redrawScatter)
         self.scatter.updateRequested.connect(self.redrawCapillary)
 
@@ -248,7 +250,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.hist.region.sigRegionChangeFinished.connect(self.redrawCapillary)
         self.hist.region.sigRegionChangeFinished.connect(self.redrawScatter)
 
-        self.hist.sigSceneMouseMoved.connect(self.printCursorPos)
+        self.hist.cursorMoved.connect(self.printCursorPos)
 
         self.view_cap = QtWidgets.QGraphicsView()
         self.view_cap.setScene(QtWidgets.QGraphicsScene())
@@ -336,6 +338,22 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             data = data[
                 np.logical_and(data["radius"] >= hist_min, data["radius"] <= hist_max)
             ]
+        if scatter:
+            xmin, ymin = self.scatter.chart.roi.pos()
+            dx, dy = self.scatter.chart.roi.size()
+            data = data[
+                np.logical_and(
+                    data[self.scatter.combo_x.currentText()] >= xmin,
+                    data[self.scatter.combo_x.currentText()] <= xmin + dx,
+                )
+            ]
+            data = data[
+                np.logical_and(
+                    data[self.scatter.combo_y.currentText()] >= ymin,
+                    data[self.scatter.combo_y.currentText()] <= ymin + dy,
+                )
+            ]
+
         return data
 
     def redrawAll(self):
@@ -344,7 +362,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.redrawScatter()
 
     def redrawCapillary(self):
-        data = self.filteredData(hist=True)
+        data = self.filteredData(hist=True, scatter=True)
         self.updateCanvasCapillary(data)
 
     def redrawHistogram(self):
