@@ -79,8 +79,10 @@ class ScatterChart(BaseChart):
             handlePen=QtGui.QPen(QtCore.Qt.GlobalColor.black, 0),
             hoverPen=QtGui.QPen(QtCore.Qt.GlobalColor.red, 0),
             handleHoverPen=QtGui.QPen(QtCore.Qt.GlobalColor.red, 0),
-            sideScalers=True,
         )
+        self.roi.addScaleHandle((0, 1), (1, 0))
+        self.roi.addScaleHandle((1, 0), (0, 1))
+        self.roi.addScaleHandle((0, 0), (1, 1))
         self.addItem(self.roi)
 
     def updateScatter(self, xs: np.ndarray, ys: np.ndarray):
