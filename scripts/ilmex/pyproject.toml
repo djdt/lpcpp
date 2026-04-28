@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ilmex"
+version = "0.1.0"
+dependencies = [
+    "numpy >= 2.0.0",
+    "PySide6 >= 6.10",
+    "pyqtgraph >= 0.13.4",
+]
+description = "Particle explorer for inline microscopy data."
+requires-python = ">= 3.10"
+license = "GPL-3.0-or-later"
+authors = [{name = "Thomas Lockwood", email = "thomas.lockwood@uni-graz.at"}]
+
+[project.urls]
+Repository = "https://github.com/djdt/lpcpp"
+
+[project.scripts]
+ilmex = "ilmex.__main__:main"

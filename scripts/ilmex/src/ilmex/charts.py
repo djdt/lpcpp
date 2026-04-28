@@ -2,7 +2,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 import numpy as np
 
-from particle_explorer.colors import cividis
+from ilmex.colors import cividis
 
 import pyqtgraph
 

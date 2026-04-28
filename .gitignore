@@ -44,4 +44,5 @@
 
 
 #python scripts
+*.egg-info
 __pycache__

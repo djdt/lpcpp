@@ -5,9 +5,9 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from particle_explorer.colors import cividis
-from particle_explorer.charts import HistogramChart, ScatterChart
-from particle_explorer.widgets import RangeSlider
+from ilmex.colors import cividis
+from ilmex.charts import HistogramChart, ScatterChart
+from ilmex.widgets import RangeSlider
 
 
 def array_to_image(array: np.ndarray) -> QtGui.QImage:
