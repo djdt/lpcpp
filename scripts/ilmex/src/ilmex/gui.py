@@ -140,7 +140,7 @@ class ControlSlider(RangeSlider):
 
 
 class ScatterWidget(QtWidgets.QWidget):
-    updateRequested = QtCore.Signal()
+    redrawRequested = QtCore.Signal()
 
     def __init__(self, data: np.ndarray, parent: QtWidgets.QWidget | None = None):
         assert data.dtype.names is not None
@@ -153,8 +153,8 @@ class ScatterWidget(QtWidgets.QWidget):
         self.combo_y.addItems(list(data.dtype.names))
         self.combo_y.setCurrentIndex(1)
 
-        self.combo_x.currentIndexChanged.connect(self.updateRequested)
-        self.combo_y.currentIndexChanged.connect(self.updateRequested)
+        self.combo_x.currentIndexChanged.connect(self.redrawRequested)
+        self.combo_y.currentIndexChanged.connect(self.redrawRequested)
 
         layout_combo = QtWidgets.QHBoxLayout()
         layout_combo.addWidget(
@@ -171,10 +171,23 @@ class ScatterWidget(QtWidgets.QWidget):
         layout.addLayout(layout_combo, 0)
         self.setLayout(layout)
 
-    def updateScatter(self, data: np.ndarray):
+    def updateScatter(self, data: np.ndarray, reset_roi: bool = True):
         xs = data[self.combo_x.currentText()]
         ys = data[self.combo_y.currentText()]
         self.chart.updateScatter(xs, ys)
+
+
+    def updateROI(self, data: np.ndarray):
+        xs = data[self.combo_x.currentText()]
+        ys = data[self.combo_y.currentText()]
+
+        xmin, xmax = np.percentile(xs, [1, 99])
+        ymin, ymax = np.percentile(ys, [1, 99])
+
+        self.chart.roi.setPos(xmin, ymin)
+        self.chart.roi.setSize(QtCore.QPointF(xmax - xmin, ymax - ymin))
+
+        self.chart.setLimits(xMin=xs.min(), xMax=xs.max(), yMin=ys.min(), yMax=ys.max())
 
 
 class CapillaryWidget(QtWidgets.QWidget):
@@ -258,33 +271,44 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         "particle_diameter_aspect_ratios_1": "aspect",
         "centroid_position_row_pix": "y",
         "centroid_position_column_pix": "x",
-        "largest_feret_diameters_µm": "radius",
+        "largest_feret_diameters_µm": "diameter",
     }
 
-    def __init__(self, path: Path, parent: QtWidgets.QWidget | None = None):
+    def __init__(
+        self,
+        path: Path,
+        pixel_size: float = 0.46,
+        parent: QtWidgets.QWidget | None = None,
+    ):
         super().__init__(parent)
         self.resize(1200, 800)
 
-        self.data = np.genfromtxt(path, names=True, delimiter=",")
+        self.data, self.data_format = self.importData(path)
         assert self.data.dtype.names is not None
 
         # fixes for specific inputs
-        if "particle_diameter_aspect_ratios_1" in self.data.dtype.names:
-            self.data["particle_diameter_aspect_ratios_1"] = (
-                1.0 / self.data["particle_diameter_aspect_ratios_1"]
+        if self.data_format == "brave":
+            self.data = rfn.rename_fields(self.data, ExplorerWindow.REMAP_NAMES)
+            self.data["aspect"] = 1.0 / self.data["aspect"]
+        elif self.data_format == "lpcpp":  # convert pixels to um
+            self.data["area"] *= pixel_size**2
+            self.data["circular_equivalent_diameter"] *= pixel_size
+            self.data["radius"] *= pixel_size
+            self.data = rfn.append_fields(
+                self.data, "diameter", self.data["radius"] * 2.0
             )
-        if "radius" in self.data.dtype.names:  # radius in pixels
-            self.data["radius"] *= 2.0 * 0.46
+            print(self.data)
+        else:
+            raise ValueError("unknown data format:", self.data_format)
 
         # convert to simple form
-        self.data = rfn.rename_fields(self.data, ExplorerWindow.REMAP_NAMES)
         assert self.data.dtype.names is not None
 
         self.scatter = ScatterWidget(self.data)
         self.scatter.chart.roi.sigRegionChangeFinished.connect(self.redrawCapillary)
         self.scatter.chart.roi.sigRegionChangeFinished.connect(self.redrawHistogram)
-        self.scatter.updateRequested.connect(self.redrawScatter)
-        self.scatter.updateRequested.connect(self.redrawCapillary)
+        self.scatter.redrawRequested.connect(self.redrawScatter)
+        self.scatter.redrawRequested.connect(self.redrawCapillary)
 
         self.hist = HistogramChart()
         self.hist.setLimits(
@@ -293,7 +317,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.hist.region.setRegion(np.percentile(self.data["radius"], [1, 99]))
         self.hist.region.setBounds((0.0, self.data["radius"].max()))
         self.hist.region.sigRegionChangeFinished.connect(self.redrawCapillary)
-        self.hist.region.sigRegionChangeFinished.connect(self.redrawScatter)
+        self.hist.region.sigRegionChangeFinished.connect(self.updateScatter)
 
         self.hist.cursorMoved.connect(self.printCursorPos)
 
@@ -348,6 +372,20 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         self.redrawAll()
 
+    def importData(self, path: str | Path) -> tuple[np.ndarray, str]:
+        with open(path) as fp:
+            line = fp.readline()
+            delimiter = ";" if ";" in line else ","
+            format = "brave" if line.startswith("particle id") else "lpcpp"
+
+        return np.genfromtxt(path, names=True, delimiter=delimiter), format
+
+    def exportFilteredData(self, output: str):
+        data = self.filteredData(True, True)
+        np.savetxt(
+            output, data, delimiter=",", header="# ilmex {version('ilmex') export"
+        )
+
     def printControl(self, name: str, min: float, max: float):
         self.status_bar.showMessage(f"{name}: {min:.12g} - {max:.12g}")
 
@@ -363,7 +401,9 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         if hist:
             hist_min, hist_max = self.hist.region.getRegion()
             data = data[
-                np.logical_and(data["radius"] >= hist_min, data["radius"] <= hist_max)
+                np.logical_and(
+                    data["diameter"] >= hist_min, data["diameter"] <= hist_max
+                )
             ]
         if scatter:
             xmin, ymin = self.scatter.chart.roi.pos()
@@ -394,8 +434,13 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
     def redrawHistogram(self):
         data = self.filteredData(scatter=True)
-        self.hist.updateHistogram(data["radius"], bins=100)
+        self.hist.updateHistogram(data["diameter"], bins=100)
+
+    def updateScatter(self):
+        data = self.filteredData(hist=True)
+        self.scatter.updateScatter(data)
 
     def redrawScatter(self):
         data = self.filteredData(hist=True)
         self.scatter.updateScatter(data)
+        self.scatter.updateROI(data)

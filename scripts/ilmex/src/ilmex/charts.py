@@ -87,9 +87,4 @@ class ScatterChart(BaseChart):
 
     def updateScatter(self, xs: np.ndarray, ys: np.ndarray):
         self.series.setData(x=xs, y=ys)
-        self.setLimits(xMin=xs.min(), xMax=xs.max(), yMin=ys.min(), yMax=ys.max())
-
-        xmin, xmax = np.percentile(xs, [1, 99])
-        ymin, ymax = np.percentile(ys, [1, 99])
-        self.roi.setPos(xmin, ymin)
-        self.roi.setSize(QtCore.QPointF(xmax - xmin, ymax - ymin))
+        self.autoRange()
