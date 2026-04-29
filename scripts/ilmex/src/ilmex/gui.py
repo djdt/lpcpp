@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.lib.recfunctions as rfn
+from importlib.metadata import version
 
 from pathlib import Path
 
@@ -175,7 +176,6 @@ class ScatterWidget(QtWidgets.QWidget):
         xs = data[self.combo_x.currentText()]
         ys = data[self.combo_y.currentText()]
         self.chart.updateScatter(xs, ys)
-
 
     def updateROI(self, data: np.ndarray):
         xs = data[self.combo_x.currentText()]
@@ -370,7 +370,43 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             [controls_dock, hist_dock], [350, 850], QtCore.Qt.Orientation.Horizontal
         )
 
+        self.createMenuBar()
         self.redrawAll()
+
+    def createMenuBar(self):
+        menu_bar = self.menuBar()
+
+        file = menu_bar.addMenu("File")
+        action_quit = QtGui.QAction("&Open", parent=self)
+        action_quit.triggered.connect(self.dialogImportData)
+        action_quit.setShortcut(QtGui.QKeySequence.StandardKey.Open)
+        file.addAction(action_quit)
+
+        action_quit = QtGui.QAction("&Save", parent=self)
+        action_quit.triggered.connect(self.dialogExportData)
+        action_quit.setShortcut(QtGui.QKeySequence.StandardKey.Save)
+        file.addAction(action_quit)
+
+        action_quit = QtGui.QAction("&Quit", parent=self)
+        action_quit.triggered.connect(self.close)
+        action_quit.setShortcut(QtGui.QKeySequence.StandardKey.Quit)
+        file.addAction(action_quit)
+
+    def dialogImportData(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Open File", "", "CSV Documents (*.csv);;All files (*)"
+        )
+        if path != "":
+            self.importData(path)
+
+    def dialogExportData(self):
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Save File", "", "CSV Documents (*.csv);;All files (*)"
+        )
+        if path != "":
+            if not path.endswith(".csv"):
+                path = path + ".csv"
+            self.exportFilteredData(path)
 
     def importData(self, path: str | Path) -> tuple[np.ndarray, str]:
         with open(path) as fp:
@@ -382,9 +418,12 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
     def exportFilteredData(self, output: str):
         data = self.filteredData(True, True)
-        np.savetxt(
-            output, data, delimiter=",", header="# ilmex {version('ilmex') export"
-        )
+        assert data.dtype.names is not None
+
+        with open(output, "w") as fp:
+            fp.write(f"# ilmex {version('ilmex')} export\n")
+            fp.write(";".join(data.dtype.names) + "\n")
+            np.savetxt(fp, data, delimiter=";", fmt="%.12g")
 
     def printControl(self, name: str, min: float, max: float):
         self.status_bar.showMessage(f"{name}: {min:.12g} - {max:.12g}")
