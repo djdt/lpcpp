@@ -80,8 +80,7 @@ bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
 void find_particles(cv::InputArray &frame, cv::InputArray &mean,
                     cv::InputArray &var, const double zscore,
                     cv::InputArray &mask, const double unsharp_alpha,
-                    std::vector<Particle> &particles, const int current_frame,
-                    long &current_id) {
+                    std::vector<Particle> &particles, const int current_frame) {
   // calculate the difference between frame and mean
   cv::UMat diff;
   frame.copyTo(diff);
@@ -116,6 +115,6 @@ void find_particles(cv::InputArray &frame, cv::InputArray &mean,
   std::transform(
       contours.begin(), contours.end(), std::back_inserter(particles),
       [&](const std::vector<cv::Point> &contour) {
-        return Particle(contour, cpu_diff, current_frame, current_id++);
+        return Particle(contour, cpu_diff, current_frame);
       });
 }

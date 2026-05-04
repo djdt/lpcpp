@@ -1,4 +1,5 @@
 #include "particle.hpp"
+#include "util.hpp"
 
 #include <execution>
 #include <numbers>
@@ -6,8 +7,9 @@
 #include <opencv2/imgproc.hpp>
 
 Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
-                   int frame_number, int id)
-    : _contour(contour), _frame(frame_number), _frame_count(1), _id(id) {
+                   int frame_number)
+    : _contour(contour), _frame(frame_number), _frame_count(1),
+      _id(id_counter++) {
   // moments for center and area
   _moments = cv::moments(_contour);
 
@@ -189,6 +191,8 @@ void filter_particles(std::vector<Particle> &particles,
           }),
       particles.end());
 }
+
+long Particle::id_counter = 0;
 
 void filter_existing_particles(
     std::vector<Particle> &old_particles, std::vector<Particle> &new_particles,

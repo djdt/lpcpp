@@ -159,7 +159,6 @@ int main(int argc, char *argv[]) {
 
   // init the particle vars
   std::deque<std::vector<Particle>> particles;
-  long particle_id = 0;
   int particle_count = 0;
 
   while (frame_pos < frame_count) {
@@ -178,7 +177,7 @@ int main(int argc, char *argv[]) {
 
     std::vector<Particle> new_particles;
     find_particles(frame, acc_mean, acc_var, zscore, mask, unsharp,
-                   new_particles, frame_pos, particle_id);
+                   new_particles, frame_pos);
     // filter particle based on parameters
     filter_particles(new_particles, particle_filter_args);
     // filter based on last n frames

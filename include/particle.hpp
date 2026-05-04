@@ -12,6 +12,8 @@ private:
   cv::Rect _rect;
   cv::RotatedRect _min_area_rect;
 
+  static long id_counter;
+
   long _id;
   int _frame;
   int _frame_count;
@@ -21,7 +23,7 @@ private:
 public:
   // ensure a cv::Mat here
   Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
-           int frame_number, int id);
+           int frame_number);
 
   const std::vector<cv::Point> &contour() const;
   const int frameNumber() const;
@@ -67,18 +69,6 @@ struct filter_args {
   double min_sharpness = 0.0;
   double max_sharpness = 0.0;
 };
-
-template <typename Iter, typename IdxIter>
-auto remove_indices(Iter begin, Iter end, IdxIter indices_begin,
-                    IdxIter indices_end) -> Iter {
-
-  while (indices_end != indices_begin) {
-    --indices_end;
-    auto pos = begin + *indices_end;
-    std::move(std::next(pos), end--, pos);
-  }
-  return end;
-}
 
 /* Filters particles by proterty, removing failing from the vector.
  * To enabled a filter pass different min and max values. */

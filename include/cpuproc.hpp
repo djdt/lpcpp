@@ -16,5 +16,4 @@ bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
 void find_particles(cv::InputArray &frame, cv::InputArray &mean,
                     cv::InputArray &var, const double zscore,
                     cv::InputArray &mask, const double unsharp_alpha,
-                    std::vector<Particle> &particles, const int current_frame,
-                    long &current_id);
+                    std::vector<Particle> &particles, const int current_frame);
