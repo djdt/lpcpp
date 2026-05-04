@@ -48,7 +48,7 @@ public:
   double radius() const;
   double sharpness() const;
 
-  void addFrame();
+  void addFrames(const int count);
   void setRawImage(const cv::Mat &frame);
   bool isClose(const Particle &b, const double edge_distance = 0.0);
 };
@@ -69,12 +69,3 @@ struct filter_args {
   double min_sharpness = 0.0;
   double max_sharpness = 0.0;
 };
-
-/* Filters particles by proterty, removing failing from the vector.
- * To enabled a filter pass different min and max values. */
-void filter_particles(std::vector<Particle> &particles, struct filter_args);
-
-void filter_existing_particles(
-    std::vector<Particle> &old_particles, std::vector<Particle> &new_particles,
-    const std::function<bool(const Particle &, const Particle &)> comparision,
-    const double edge_distance = 20.0);

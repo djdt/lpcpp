@@ -1,7 +1,6 @@
 #include "particle.hpp"
-#include "util.hpp"
 
-#include <execution>
+#include <numeric>
 #include <numbers>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -123,7 +122,7 @@ double Particle::sharpness() const {
   return sigma[0];
 }
 
-void Particle::addFrame() { _frame_count++; }
+void Particle::addFrames(const int count) { _frame_count += count; }
 
 void Particle::setRawImage(const cv::Mat &frame) {
   _image_raw = frame(_rect).clone();
@@ -135,105 +134,5 @@ bool Particle::isClose(const Particle &b, const double edge_distance) {
          edge_distance;
 };
 
-void filter_particles(std::vector<Particle> &particles,
-                      struct filter_args args) {
-  particles.erase(
-      std::remove_if(
-          std::execution::par, particles.begin(), particles.end(),
-          [=](Particle &p) {
-            if (args.min_area != args.max_area) {
-              double area = p.area();
-              if (area < args.min_area or area > args.max_area) {
-                return true;
-              }
-            }
-            if (args.min_aspect != args.max_aspect) {
-              double aspect = p.aspect();
-              if (aspect < args.min_aspect or aspect > args.max_aspect) {
-                return true;
-              }
-            }
-            if (args.min_circularity != args.max_circularity) {
-              double circularity = p.circularity();
-              if (circularity < args.min_circularity or
-                  circularity > args.max_circularity) {
-                return true;
-              }
-            }
-            if (args.min_convexity != args.max_convexity) {
-              double convexity = p.convexity();
-              if (convexity < args.min_convexity or
-                  convexity > args.max_convexity) {
-                return true;
-              }
-            }
-            if (args.min_radius != args.max_radius) {
-              double radius = p.radius();
-              if (radius < args.min_radius or radius > args.max_radius) {
-                return true;
-              }
-            }
-            if (args.min_intensity != args.max_intensity) {
-              double intensity = p.intensity();
-              if (intensity < args.min_intensity or
-                  intensity > args.max_intensity) {
-                return true;
-              }
-            }
-            if (args.min_sharpness != args.max_sharpness) {
-              double sharpness = p.sharpness();
-              if (sharpness < args.min_sharpness or
-                  sharpness > args.max_sharpness) {
-                return true;
-              }
-            }
-            return false;
-          }),
-      particles.end());
-}
 
 long Particle::id_counter = 0;
-
-void filter_existing_particles(
-    std::vector<Particle> &old_particles, std::vector<Particle> &new_particles,
-    const std::function<bool(const Particle &, const Particle &)> comparison,
-    const double edge_distance) {
-  std::vector<size_t> remove_new_at;
-  old_particles.erase(
-      std::remove_if(
-          std::execution::seq, old_particles.begin(), old_particles.end(),
-          [&](Particle &old) {
-            for (auto it_new = new_particles.begin();
-                 it_new != new_particles.end(); ++it_new) {
-
-              if (it_new->isClose(old, edge_distance)) {
-
-                if (comparison(*it_new, old)) {
-                  it_new->addFrame();
-                  return true; // old is removed
-                } else {
-                  // remove new
-                  size_t idx = std::distance(new_particles.begin(), it_new);
-                  if (remove_new_at.size() == 0 or
-                      remove_new_at.back() != idx) {
-                    remove_new_at.push_back(idx);
-                  }
-                  old.addFrame();
-                  return false;
-                }
-              }
-            }
-            return false;
-          }),
-      old_particles.end());
-
-  // sort and remove non-unqiue indicies
-  std::sort(remove_new_at.begin(), remove_new_at.end());
-  auto last = std::unique(remove_new_at.begin(), remove_new_at.end());
-  remove_new_at.erase(last, remove_new_at.end());
-
-  new_particles.erase(remove_indices(new_particles.begin(), new_particles.end(),
-                                     remove_new_at.begin(),
-                                     remove_new_at.end()),
-                      new_particles.end());
-}
