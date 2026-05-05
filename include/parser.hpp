@@ -25,7 +25,15 @@ public:
     oss << "--" << name;
     if (required)
       oss << " (required)";
-    oss << ", " << help << ", default = " << default_value;
+    oss << ", " << help;
+    if constexpr (std::is_same_v<std::string, T>) {
+      if (!default_value.empty())
+        oss << ", default = " << default_value;
+    } else if constexpr (std::is_same_v<bool, std::decay_t<T>>) {
+      oss << ", default = " << (default_value ? "true" : "false");
+    } else {
+      oss << ", default = " << default_value;
+    }
     return oss.str();
   }
 
@@ -41,7 +49,7 @@ public:
         valid = false;
       if (it->substr(0, 2) == "--" && it->substr(2) == name) {
         // shortcut for flags
-        if constexpr (std::is_same<T, bool>::value) {
+        if constexpr (std::is_same_v<T, bool>) {
           args_read.push_back(name);
           return true;
         }
