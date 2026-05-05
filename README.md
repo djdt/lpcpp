@@ -43,3 +43,28 @@ The following options are available:
         valid keys are: 'area', 'aspect', circularity', 'convexity', 'intensity', 'radius', 'sharpness'.
         If no file exists, a default config file is created.
 ```
+
+## Python Explorer
+
+A Python GUI is available to explore exported particle data. Data is show as size histograms, scatter plots and heatmaps of the capillary.
+
+### Installation
+
+1. Enter the scripts folder
+   ```
+   cd scripts
+   ```
+2. Install using pip or uv.
+   ```
+   pip install -e ilmex
+   ```
+   ```
+   uv pip install -e ilmex
+   ```
+3. Run the script.
+   ```
+   ilmex
+   ```
+   ```
+   uv run ilmex
+   ```
