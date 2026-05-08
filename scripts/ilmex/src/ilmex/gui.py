@@ -295,9 +295,8 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             self.data["circular_equivalent_diameter"] *= pixel_size
             self.data["radius"] *= pixel_size
             self.data = rfn.append_fields(
-                self.data, "diameter", self.data["radius"] * 2.0
+                self.data, "diameter", self.data["radius"] * 2.0, usemask=False
             )
-            print(self.data)
         else:
             raise ValueError("unknown data format:", self.data_format)
 
