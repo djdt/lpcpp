@@ -261,6 +261,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         "solidity": (0, 1.0, 1e-2),
         "intensity": (0, None, 1),
         "sharpness": (0, None, 1),
+        "frame": (1, None, 1),
         "x": (None, None, 1),
         "y": (None, None, 1),
     }
@@ -272,6 +273,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         "centroid_position_row_pix": "y",
         "centroid_position_column_pix": "x",
         "largest_feret_diameters_µm": "diameter",
+        "frame_id": "frame",
     }
 
     def __init__(
@@ -311,10 +313,10 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         self.hist = HistogramChart()
         self.hist.setLimits(
-            xMin=0.0, xMax=self.data["radius"].max(), yMin=0.0, yMax=100.0
+            xMin=0.0, xMax=self.data["diameter"].max(), yMin=0.0, yMax=100.0
         )
-        self.hist.region.setRegion(np.percentile(self.data["radius"], [1, 99]))
-        self.hist.region.setBounds((0.0, self.data["radius"].max()))
+        self.hist.region.setRegion(np.percentile(self.data["diameter"], [1, 99]))
+        self.hist.region.setBounds((0.0, self.data["diameter"].max()))
         self.hist.region.sigRegionChangeFinished.connect(self.redrawCapillary)
         self.hist.region.sigRegionChangeFinished.connect(self.updateScatter)
 
