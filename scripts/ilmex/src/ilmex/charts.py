@@ -16,7 +16,7 @@ class BaseChart(pyqtgraph.PlotWidget):
         self.xaxis = pyqtgraph.AxisItem("bottom")
         self.yaxis = pyqtgraph.AxisItem("left")
 
-    def mouseMoveEvent(self, event: QtGui.QMouseEvent):  # type: ignore
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent):
         super().mouseMoveEvent(event)
         if self.plotItem is None:
             return
@@ -87,4 +87,25 @@ class ScatterChart(BaseChart):
 
     def updateScatter(self, xs: np.ndarray, ys: np.ndarray):
         self.series.setData(x=xs, y=ys)
+        self.autoRange()
+
+
+class TimeChart(BaseChart):
+    def __init__(self, parent: QtWidgets.QWidget | None = None):
+        super().__init__(parent=parent)
+        pen = QtGui.QPen(QtCore.Qt.GlobalColor.black, 1)
+        pen.setCosmetic(True)
+        self.series = pyqtgraph.PlotCurveItem(
+            x=[0],
+            y=[0],
+            skipFiniteCheck=True,
+            pen=pen,
+        )
+        self.addItem(self.series)
+
+    def updatePlot(
+        self, xs: np.ndarray, ys: np.ndarray, stds: np.ndarray | None = None
+    ):
+        self.series.setData(x=xs, y=ys)
+        self.setLimits(xMax=xs.max())
         self.autoRange()

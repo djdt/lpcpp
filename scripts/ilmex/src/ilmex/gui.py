@@ -1,3 +1,4 @@
+from matplotlib.pylab import histogram
 import numpy as np
 import numpy.lib.recfunctions as rfn
 from importlib.metadata import version
@@ -7,7 +8,7 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ilmex.colors import cividis
-from ilmex.charts import HistogramChart, ScatterChart
+from ilmex.charts import HistogramChart, ScatterChart, TimeChart
 from ilmex.widgets import RangeSlider
 
 
@@ -250,6 +251,28 @@ class CapillaryWidget(QtWidgets.QWidget):
         self.count.setText(f"Particles: {data.size}")
 
 
+class TimeResolvedWidget(QtWidgets.QWidget):
+    def __init__(self, fps: int, parent: QtWidgets.QWidget | None = None):
+        super().__init__(parent)
+
+        self.view = TimeChart()
+
+        self.fps = fps
+        self.resolution = QtWidgets.QDoubleSpinBox()
+        self.resolution.setRange(0.001, 10.0)
+        self.resolution.setValue(1.0)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.view, 1)
+        layout.addWidget(self.resolution, 0)
+        self.setLayout(layout)
+
+    def updatePlot(self, data: np.ndarray):
+        xs = np.arange(0, data["frame"].max(), self.resolution.value() * self.fps)
+        ys, _ = np.histogram(data["frame"], bins=xs)
+        self.view.updatePlot(xs[:-1], ys)
+
+
 class ExplorerWindow(QtWidgets.QMainWindow):
     CAMERA_SIZE = 2048, 1536
     VALID_RANGES = {  # name : (min val, max val, scale)
@@ -280,6 +303,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self,
         path: Path,
         pixel_size: float = 0.46,
+        fps: int = 90,
         parent: QtWidgets.QWidget | None = None,
     ):
         super().__init__(parent)
@@ -321,6 +345,8 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.hist.region.sigRegionChangeFinished.connect(self.updateScatter)
 
         self.hist.cursorMoved.connect(self.printCursorPos)
+
+        self.time = TimeResolvedWidget(fps)
 
         self.capillary = CapillaryWidget()
 
@@ -364,6 +390,10 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         scatter_dock = QtWidgets.QDockWidget("Scatter")
         scatter_dock.setWidget(self.scatter)
         self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, scatter_dock)
+
+        time_dock = QtWidgets.QDockWidget("Time Resolved")
+        time_dock.setWidget(self.time)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, time_dock)
 
         self.tabifyDockWidget(scatter_dock, hist_dock)
 
@@ -467,6 +497,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.redrawHistogram()
         self.redrawCapillary()
         self.redrawScatter()
+        self.redrawTime()
 
     def redrawCapillary(self):
         data = self.filteredData(hist=True, scatter=True)
@@ -484,3 +515,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         data = self.filteredData(hist=True)
         self.scatter.updateScatter(data)
         self.scatter.updateROI(data)
+
+    def redrawTime(self):
+        data = self.filteredData(hist=True, scatter=True)
+        self.time.updatePlot(data)
