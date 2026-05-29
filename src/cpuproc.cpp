@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <execution>
+#include <iomanip>
 #include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
@@ -192,8 +193,9 @@ void filter_existing_particles(
               if (it_new->isClose(old, edge_distance)) {
 
                 if (comparison(*it_new, old)) {
-                  it_new->addFrames(old.frameCount()); // inherit old particle count
-                  return true; // old is removed
+                  it_new->addFrames(
+                      old.frameCount()); // inherit old particle count
+                  return true;           // old is removed
                 } else {
                   // remove new
                   size_t idx = std::distance(new_particles.begin(), it_new);
