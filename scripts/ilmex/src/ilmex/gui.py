@@ -223,8 +223,8 @@ class CapillaryWidget(QtWidgets.QWidget):
 
     def updateImage(self, data: np.ndarray):
         hist, _, _ = np.histogram2d(
-            data["y"],
             data["x"],
+            data["y"],
             bins=(
                 np.arange(0, ExplorerWindow.CAMERA_SIZE[1], 25),
                 np.arange(0, ExplorerWindow.CAMERA_SIZE[0], 25),
