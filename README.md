@@ -3,7 +3,7 @@
 lpcpp processes inline microscopy videos to detect particles using OpenCL.
 
 ## Installation
-lpcpp requires CMake, a compiler supporting C++23, and the [IntelTBB](https://www.intel.com/content/www/us/en/docs/onetbb/get-started-guide/2022-1/overview.html) and [OpenCV 4](https://docs.opencv.org/4.x/df/d65/tutorial_table_of_content_introduction.html) libraries.
+lpcpp requires CMake, a compiler supporting C++23, and the [IntelTBB](https://www.intel.com/content/www/us/en/docs/onetbb/get-started-guide/2022-1/overview.html) and [OpenCV 4.13](https://docs.opencv.org/4.x/df/d65/tutorial_table_of_content_introduction.html) libraries.
 
 If building on Windows using Visual Studio then OpenCV is expected at ```C:\opencv``` and ```C:\opencv\build\x64\vcxx\bin``` should be added to envrionments path.
 
