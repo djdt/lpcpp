@@ -145,13 +145,18 @@ class ScatterWidget(QtWidgets.QWidget):
 
     def __init__(self, data: np.ndarray, parent: QtWidgets.QWidget | None = None):
         assert data.dtype.names is not None
+
         super().__init__(parent)
         self.chart = ScatterChart()
 
+        names = list(data.dtype.names)
+        names.remove("diameter")
+
         self.combo_x = QtWidgets.QComboBox()
-        self.combo_x.addItems(list(data.dtype.names))
+        self.combo_x.addItems(names)
+
         self.combo_y = QtWidgets.QComboBox()
-        self.combo_y.addItems(list(data.dtype.names))
+        self.combo_y.addItems(names)
         self.combo_y.setCurrentIndex(1)
 
         self.combo_x.currentIndexChanged.connect(self.redrawRequested)
@@ -265,16 +270,26 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         "x": (None, None, 1),
         "y": (None, None, 1),
     }
-    REMAP_NAMES = {
-        "circularity_1": "circularity",
-        "convexity_1": "covexity",
-        "solidity_1": "solidity",
-        "particle_diameter_aspect_ratios_1": "aspect",
-        "centroid_position_row_pix": "y",
-        "centroid_position_column_pix": "x",
-        "largest_feret_diameters_µm": "diameter",
-        "frame_id": "frame",
+    BRAVE_COLUMNS = {
+        1: "diameter",
+        6: "cicrularity",
+        7: "convexity",
+        8: "solidity",
+        9: "aspect",
+        11: "frame",
+        12: "y",
+        13: "x",
     }
+    # REMAP_NAMES = {
+    #     "circularity_1": "circularity",
+    #     "convexity_1": "covexity",
+    #     "solidity_1": "solidity",
+    #     "particle_diameter_aspect_ratios_1": "aspect",
+    #     "centroid_position_row_pix": "y",
+    #     "centroid_position_column_pix": "x",
+    #     "largest_feret_diameters_µm": "diameter",
+    #     "frame_id": "frame",
+    # }
 
     def __init__(
         self,
@@ -290,7 +305,11 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         # fixes for specific inputs
         if self.data_format == "brave":
-            self.data = rfn.rename_fields(self.data, ExplorerWindow.REMAP_NAMES)
+            brave_map = {
+                self.data.dtype.names[key]: val
+                for key, val in ExplorerWindow.BRAVE_COLUMNS.items()
+            }
+            self.data = rfn.rename_fields(self.data, brave_map)
             self.data["aspect"] = 1.0 / self.data["aspect"]
         elif self.data_format == "lpcpp":  # convert pixels to um
             self.data["area"] *= pixel_size**2
