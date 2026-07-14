@@ -52,10 +52,10 @@ int main(int argc, char *argv[]) {
       ->configurable(false);
 
   app.add_option(
-         "--background-frames", background_frames,
+         "--background", background_frames,
          "number of background frames used to determine initial mean and std")
       ->check(CLI::PositiveNumber);
-  app.add_option("--track-frames", particle_frames,
+  app.add_option("--track", particle_frames,
                  "number of frames to track particles after last detection")
       ->check(CLI::PositiveNumber);
   app.add_option("--distance", particle_distance,
