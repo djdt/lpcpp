@@ -1,10 +1,13 @@
+#include <algorithm>
 #include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <opencv2/core.hpp>
+#include <opencv2/core/matx.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
+#include <sstream>
 #include <string>
 
 #include "parser.hpp"
@@ -40,9 +43,12 @@ int main(int argc, char *argv[]) {
       "output", std::string(), "output directory for processed data");
   bool export_images =
       parser.read("export-images", false, "export images of particles");
+  std::string capillary_settings = parser.read<std::string>(
+      "capillary", std::string(),
+      "capillary position and radius in the format <x>,<y>,<radius>");
   std::string config_path = parser.read<std::string>(
       "config", std::string(),
-      "path to filter config, with lines: '<key> <min> <max>'\n"
+      "path to image config, with lines: '<key> <min> <max>'\n"
       "\tvalid keys are: 'area', 'aspect', circularity', 'convexity', "
       "'intensity', 'radius', 'sharpness'.\n"
       "\tIf no file exists, a default config file is created.");
@@ -57,9 +63,24 @@ int main(int argc, char *argv[]) {
       return 0;
     }
     if (read_filter_config(config_path, particle_filter_args)) {
-      std::cerr << "unable to read filter config '" << config_path << "'"
-                << std::endl;
+      std::cerr << "unable to read config '" << config_path << "'" << std::endl;
       return 1;
+    }
+  }
+
+  cv::Vec3f capillary;
+  if (!capillary_settings.empty()) {
+    if (std::count_if(capillary_settings.begin(), capillary_settings.end(),
+                      [](char c) { return c == ','; }) != 2) {
+      std::cerr << "--capillary must have the format <x>,<y>,<radius>";
+      return 1;
+    }
+
+    std::istringstream iss(capillary_settings);
+    std::string tok;
+    int i = 0;
+    while (std::getline(iss, tok, ',')) {
+      capillary[i++] = std::stod(tok);
     }
   }
 
@@ -123,7 +144,9 @@ int main(int argc, char *argv[]) {
   std::cout << "\tframes = " << frame_count << std::endl;
   std::cout << "\tsize = " << width << " x " << height << std::endl;
 
-  cv::Vec3f capillary = find_capillary(frame);
+  if (capillary[2] == 0.0) {
+    capillary = find_capillary(frame);
+  }
   if (capillary[2] == 0.0) {
     std::cerr << "\tcould not detect capillary" << std::endl;
     return 1;
@@ -131,9 +154,9 @@ int main(int argc, char *argv[]) {
     std::cout << "\tcapillary detected at " << capillary[0] << " x "
               << capillary[1] << " with radius " << capillary[2] << " px"
               << std::endl;
+    // shrink
+    capillary[2] *= 0.95;
   }
-  // shrink
-  capillary[2] *= 0.95;
   cv::circle(mask, cv::Point(capillary[0], capillary[1]), capillary[2], 255,
              -1);
 
@@ -208,7 +231,7 @@ int main(int argc, char *argv[]) {
                  cv::Scalar(0, 255, 0), 1);
       cv::imshow("frame", rgb_frame);
 
-      int key = cv::waitKey(50);
+      int key = cv::waitKey(20);
       if (key == 'q') {
         break;
       }
