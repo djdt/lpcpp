@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
   filter_cmd->add_option("--sharpness", particle_filter_args.aspect,
                          "allowed particle sharpness");
 
-  app.set_config("--config", "",
+  app.set_config("--config", std::string(),
                  "read options from a config file, if no path is passed "
                  "creates a default config");
 
