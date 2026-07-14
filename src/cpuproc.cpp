@@ -9,16 +9,16 @@
 #include "particle.hpp"
 #include "util.hpp"
 
-cv::Vec3f find_capillary(cv::InputArray &input) {
+std::array<float, 3> find_capillary(cv::InputArray &input) {
   std::vector<cv::Vec3f> circles;
   cv::HoughCircles(input, circles, cv::HOUGH_GRADIENT, 1.0,
                    static_cast<float>(input.rows()) / 2.f, 50, 5,
                    input.rows() / 4, input.rows());
 
   if (circles.size() == 0) {
-    return cv::Vec3f(0.f, 0.f, 0.f);
+    return {0.f, 0.f, 0.f};
   }
-  return circles[0];
+  return {circles[0][0], circles[0][1], circles[0][2]};
 }
 
 void unsharp_mask(cv::InputArray &image, cv::OutputArray &output,

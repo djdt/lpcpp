@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
   double particle_distance = 3.0;
   double zscore = 3.0;
   double unsharp = 1.0;
-  std::array<float, 3> _capillary = {0.f, 0.f, 0.f};
+  std::array<float, 3> capillary = {0.f, 0.f, 0.f};
 
   bool draw = false;
   bool export_images = false;
@@ -43,6 +43,7 @@ int main(int argc, char *argv[]) {
   filter_args particle_filter_args;
 
   app.add_option("file", inname, "path to the captured OIM video")
+      ->check(CLI::ExistingFile)
       ->configurable(false);
   app.add_option("--output,-o", outname,
                  "specify the output directory, defaults to 'processed'")
@@ -58,7 +59,7 @@ int main(int argc, char *argv[]) {
   app.add_option("--zscore", zscore,
                  "number of std above the background mean to threshold");
   app.add_option("--unsharp", unsharp, "alpha value of the unsharp mask");
-  app.add_option("--capillary", _capillary,
+  app.add_option("--capillary", capillary,
                  "capillary position and radius <x> <y> <radius>. If 0, try to "
                  "read from video");
 
@@ -85,46 +86,45 @@ int main(int argc, char *argv[]) {
   filter_cmd->add_option("--sharpness", particle_filter_args.aspect,
                          "allowed particle sharpness");
 
-  app.set_config("--config", "", "read options from a config file");
+  app.set_config("--config", "",
+                 "read options from a config file, if no path is passed "
+                 "creates a default config");
 
-  auto conf_sub =
-      app.add_subcommand("make_config", "create a default config file");
-  conf_sub->add_option("output", confname, "write default config to the file")
-      ->required(true)
-      ->configurable(false);
+  try {
+    (app).parse(argc, argv);
+  } catch (const CLI::FileError &e) {
+    std::string conf = app.get_config_ptr()->as<std::string>();
+    std::cout << "config file does not exists, creating default at " << conf
+              << std::endl;
 
-  CLI11_PARSE(app, argc, argv);
-
-  if (conf_sub->parsed()) {
-    std::filesystem::path confpath(CLI::to_path(confname));
-    std::ofstream cfs(confpath);
+    std::ofstream cfs(CLI::to_path(conf));
     cfs << app.config_to_str(true);
     return 0;
+  } catch (const CLI::ParseError &e) {
+    return (app).exit(e);
   }
 
   // Convert some of the parsed options
   std::filesystem::path path(CLI::to_path(inname));
   std::filesystem::path output_dir;
-  cv::Vec3f capillary(_capillary[0], _capillary[1], _capillary[2]);
+  // cv::Vec3f capillary(_capillary[0], _capillary[1], _capillary[2]);
 
+  // validation
   if (!std::filesystem::exists(path)) {
-    std::cerr << "input video file" << path << "does not exist" << std::endl;
+    std::cerr << "video file " << path << " does not exist" << std::endl;
     return 1;
   }
+
   if (outname.empty()) {
     output_dir = path.parent_path() / "processed";
   } else {
     output_dir = CLI::to_path(outname);
     if (std::filesystem::exists(output_dir) &&
         !std::filesystem::is_directory(output_dir)) {
-      std::cerr << "output path" << output_dir << "is not a directory"
+      std::cerr << "output path " << output_dir << " is not a directory"
                 << std::endl;
       return 1;
     }
-  }
-
-  if (app.get_config_ptr() && app.get_config_ptr()->count()) {
-    std::cout << app.get_config_ptr()->as<std::string>() << std::endl;
   }
 
   // create capture and read some props

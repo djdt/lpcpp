@@ -1,9 +1,10 @@
+#include <array>
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
 
 #include "particle.hpp"
 
-cv::Vec3f find_capillary(cv::InputArray &input);
+std::array<float, 3> find_capillary(cv::InputArray &input);
 
 void unsharp_mask(cv::InputArray &image, cv::OutputArray &output, double alpha);
 
