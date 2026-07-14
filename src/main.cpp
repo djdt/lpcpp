@@ -81,20 +81,33 @@ int main(int argc, char *argv[]) {
 
   auto filter_cmd =
       app.add_subcommand("filter", "options for filtering particles");
-  filter_cmd->add_option("--area", particle_filter_args.area,
-                         "allowed particle area");
-  filter_cmd->add_option("--aspect", particle_filter_args.aspect,
-                         "allowed particle aspect ratio");
-  filter_cmd->add_option("--circularity", particle_filter_args.aspect,
-                         "allowed particle circularity");
-  filter_cmd->add_option("--convexity", particle_filter_args.aspect,
-                         "allowed particle convexity");
-  filter_cmd->add_option("--intensity", particle_filter_args.aspect,
-                         "allowed particle intensity (darkness)");
-  filter_cmd->add_option("--radius", particle_filter_args.aspect,
-                         "allowed particle radius");
-  filter_cmd->add_option("--sharpness", particle_filter_args.aspect,
-                         "allowed particle sharpness");
+  filter_cmd
+      ->add_option("--area", particle_filter_args.area, "allowed particle area")
+      ->check(CLI::NonNegativeNumber);
+  filter_cmd
+      ->add_option("--aspect", particle_filter_args.aspect,
+                   "allowed particle aspect ratio")
+      ->check(CLI::Range(0, 1));
+  filter_cmd
+      ->add_option("--circularity", particle_filter_args.circularity,
+                   "allowed particle circularity")
+      ->check(CLI::Range(0, 1));
+  filter_cmd
+      ->add_option("--convexity", particle_filter_args.convexity,
+                   "allowed particle convexity")
+      ->check(CLI::Range(0, 1));
+  filter_cmd
+      ->add_option("--intensity", particle_filter_args.intensity,
+                   "allowed particle intensity (darkness)")
+      ->check(CLI::NonNegativeNumber);
+  filter_cmd
+      ->add_option("--radius", particle_filter_args.radius,
+                   "allowed particle radius")
+      ->check(CLI::NonNegativeNumber);
+  filter_cmd
+      ->add_option("--sharpness", particle_filter_args.sharpness,
+                   "allowed particle sharpness")
+      ->check(CLI::NonNegativeNumber);
 
   app.set_config("--config", std::string(),
                  "read options from a config file, if no path is passed "
