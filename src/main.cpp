@@ -25,6 +25,8 @@ int main(int argc, char *argv[]) {
 
   CLI::App app;
   app.option_defaults()->always_capture_default();
+  app.set_help_flag("");
+  app.set_help_all_flag("-h,--help");
 
   std::string inname;
   std::string outname;
@@ -81,21 +83,22 @@ int main(int argc, char *argv[]) {
 
   auto filter_cmd =
       app.add_subcommand("filter", "options for filtering particles");
+  filter_cmd->configurable();
   filter_cmd
       ->add_option("--area", particle_filter_args.area, "allowed particle area")
       ->check(CLI::NonNegativeNumber);
   filter_cmd
       ->add_option("--aspect", particle_filter_args.aspect,
                    "allowed particle aspect ratio")
-      ->check(CLI::Range(0, 1));
+      ->check(CLI::Range(0.0, 1.0));
   filter_cmd
       ->add_option("--circularity", particle_filter_args.circularity,
                    "allowed particle circularity")
-      ->check(CLI::Range(0, 1));
+      ->check(CLI::Range(0.0, 1.0));
   filter_cmd
       ->add_option("--convexity", particle_filter_args.convexity,
                    "allowed particle convexity")
-      ->check(CLI::Range(0, 1));
+      ->check(CLI::Range(0.0, 1.0));
   filter_cmd
       ->add_option("--intensity", particle_filter_args.intensity,
                    "allowed particle intensity (darkness)")
