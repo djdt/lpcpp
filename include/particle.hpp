@@ -54,18 +54,11 @@ public:
 };
 
 struct filter_args {
-  double min_area = 5.0;
-  double max_area = 1e4;
-  double min_aspect = 0.5;
-  double max_aspect = 1.0;
-  double min_circularity = 0.5;
-  double max_circularity = 1.0;
-  double min_convexity = 0.5;
-  double max_convexity = 1.0;
-  double min_radius = 1.0;
-  double max_radius = 1e3;
-  double min_intensity = 1e3;
-  double max_intensity = 1e6;
-  double min_sharpness = 0.0;
-  double max_sharpness = 0.0;
+  std::pair<double, double> area = {5.0, 1e4};
+  std::pair<double, double> aspect = {0.5, 1.0};
+  std::pair<double, double> circularity = {0.5, 1.0};
+  std::pair<double, double> convexity = {0.5, 1.0};
+  std::pair<double, double> intensity = {1e3, 1e6};
+  std::pair<double, double> radius = {1.0, 11e3};
+  std::pair<double, double> sharpness = {0.0, 0.0};
 };

@@ -127,49 +127,49 @@ void filter_particles(std::vector<Particle> &particles,
       std::remove_if(
           std::execution::par, particles.begin(), particles.end(),
           [=](Particle &p) {
-            if (args.min_area != args.max_area) {
+            if (args.area.first != args.area.second) {
               double area = p.area();
-              if (area < args.min_area or area > args.max_area) {
+              if (area < args.area.first or area > args.area.second) {
                 return true;
               }
             }
-            if (args.min_aspect != args.max_aspect) {
+            if (args.aspect.first != args.aspect.second) {
               double aspect = p.aspect();
-              if (aspect < args.min_aspect or aspect > args.max_aspect) {
+              if (aspect < args.aspect.first or aspect > args.aspect.second) {
                 return true;
               }
             }
-            if (args.min_circularity != args.max_circularity) {
+            if (args.circularity.first != args.circularity.second) {
               double circularity = p.circularity();
-              if (circularity < args.min_circularity or
-                  circularity > args.max_circularity) {
+              if (circularity < args.circularity.first or
+                  circularity > args.circularity.second) {
                 return true;
               }
             }
-            if (args.min_convexity != args.max_convexity) {
+            if (args.convexity.first != args.convexity.second) {
               double convexity = p.convexity();
-              if (convexity < args.min_convexity or
-                  convexity > args.max_convexity) {
+              if (convexity < args.convexity.first or
+                  convexity > args.convexity.second) {
                 return true;
               }
             }
-            if (args.min_radius != args.max_radius) {
+            if (args.radius.first != args.radius.second) {
               double radius = p.radius();
-              if (radius < args.min_radius or radius > args.max_radius) {
+              if (radius < args.radius.first or radius > args.radius.second) {
                 return true;
               }
             }
-            if (args.min_intensity != args.max_intensity) {
+            if (args.intensity.first != args.intensity.second) {
               double intensity = p.intensity();
-              if (intensity < args.min_intensity or
-                  intensity > args.max_intensity) {
+              if (intensity < args.intensity.first or
+                  intensity > args.intensity.second) {
                 return true;
               }
             }
-            if (args.min_sharpness != args.max_sharpness) {
+            if (args.sharpness.first != args.sharpness.second) {
               double sharpness = p.sharpness();
-              if (sharpness < args.min_sharpness or
-                  sharpness > args.max_sharpness) {
+              if (sharpness < args.sharpness.first or
+                  sharpness > args.sharpness.second) {
                 return true;
               }
             }
