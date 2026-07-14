@@ -7,14 +7,14 @@
 #include <opencv2/core/matx.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
-#include <sstream>
 #include <string>
+#include <vector>
 
-#include "parser.hpp"
-#include "particle.hpp"
+#include "CLI11.hpp"
 
 #include "cpuproc.hpp"
 #include "io.hpp"
+#include "particle.hpp"
 #include "util.hpp"
 
 #ifndef CMAKE_PROJECT_VERSION
@@ -23,76 +23,109 @@
 
 int main(int argc, char *argv[]) {
 
-  // find and check parameters
-  auto parser = ArgumentParser(argc, argv);
+  CLI::App app;
+  app.option_defaults()->always_capture_default();
 
-  int background_frames = parser.read(
-      "background-frames", 1000,
-      "number of background frames used to determine initial mean and std");
-  int particle_frames =
-      parser.read("particle-frames", 50,
-                  "number of frames to track particles after last detection");
-  double particle_distance = parser.read("particle-distance", 3.0,
-                                         "minimum distance between particles");
-  double zscore = parser.read(
-      "zscore", 3.0, "number of std above the background mean to threshold");
-  double unsharp =
-      parser.read("unsharp", 1.0, "apply an unsharp mask at this alpha");
-  bool draw_frames = parser.read("draw", false, "show video and detections");
-  std::string output_path = parser.read<std::string>(
-      "output", std::string(), "output directory for processed data");
-  bool export_images =
-      parser.read("export-images", false, "export images of particles");
-  std::string capillary_settings = parser.read<std::string>(
-      "capillary", std::string(),
-      "capillary position and radius in the format <x>,<y>,<radius>");
-  std::string config_path = parser.read<std::string>(
-      "config", std::string(),
-      "path to image config, with lines: '<key> <min> <max>'\n"
-      "\tvalid keys are: 'area', 'aspect', circularity', 'convexity', "
-      "'intensity', 'radius', 'sharpness'.\n"
-      "\tIf no file exists, a default config file is created.");
+  std::string inname;
+  std::string outname;
+  std::string confname;
+
+  int background_frames = 1000;
+  int particle_frames = 50;
+  double particle_distance = 3.0;
+  double zscore = 3.0;
+  double unsharp = 1.0;
+  std::array<float, 3> _capillary = {0.f, 0.f, 0.f};
+
+  bool draw = false;
+  bool export_images = false;
 
   filter_args particle_filter_args;
 
-  if (!config_path.empty()) {
-    if (!std::filesystem::exists(config_path)) {
-      write_filter_config(config_path, particle_filter_args);
-      std::cout << "default config written to '" << config_path << "'"
-                << std::endl;
-      return 0;
-    }
-    if (read_filter_config(config_path, particle_filter_args)) {
-      std::cerr << "unable to read config '" << config_path << "'" << std::endl;
-      return 1;
-    }
+  app.add_option("file", inname, "path to the captured OIM video")
+      ->configurable(false);
+  app.add_option("--output,-o", outname,
+                 "specify the output directory, defaults to 'processed'")
+      ->configurable(false);
+
+  app.add_option(
+      "--background-frames", background_frames,
+      "number of background frames used to determine initial mean and std");
+  app.add_option("--particle-frames", particle_frames,
+                 "number of frames to track particles after last detection");
+  app.add_option("--particle-distance", particle_distance,
+                 "minimum distance between particles");
+  app.add_option("--zscore", zscore,
+                 "number of std above the background mean to threshold");
+  app.add_option("--unsharp", unsharp, "alpha value of the unsharp mask");
+  app.add_option("--capillary", _capillary,
+                 "capillary position and radius <x> <y> <radius>. If 0, try to "
+                 "read from video");
+
+  app.add_flag("--draw", "show video and detections")->configurable(false);
+  ;
+  app.add_flag("--export-images", "export an image of each particle")
+      ->configurable(false);
+  ;
+
+  auto filter_cmd =
+      app.add_subcommand("filter", "options for filtering particles");
+  filter_cmd->add_option("--area", particle_filter_args.area,
+                         "allowed particle area");
+  filter_cmd->add_option("--aspect", particle_filter_args.aspect,
+                         "allowed particle aspect ratio");
+  filter_cmd->add_option("--circularity", particle_filter_args.aspect,
+                         "allowed particle circularity");
+  filter_cmd->add_option("--convexity", particle_filter_args.aspect,
+                         "allowed particle convexity");
+  filter_cmd->add_option("--intensity", particle_filter_args.aspect,
+                         "allowed particle intensity (darkness)");
+  filter_cmd->add_option("--radius", particle_filter_args.aspect,
+                         "allowed particle radius");
+  filter_cmd->add_option("--sharpness", particle_filter_args.aspect,
+                         "allowed particle sharpness");
+
+  app.set_config("--config", "", "read options from a config file");
+
+  auto conf_sub =
+      app.add_subcommand("make_config", "create a default config file");
+  conf_sub->add_option("output", confname, "write default config to the file")
+      ->required(true)
+      ->configurable(false);
+
+  CLI11_PARSE(app, argc, argv);
+
+  if (conf_sub->parsed()) {
+    std::filesystem::path confpath(CLI::to_path(confname));
+    std::ofstream cfs(confpath);
+    cfs << app.config_to_str(true);
+    return 0;
   }
 
-  cv::Vec3f capillary;
-  if (!capillary_settings.empty()) {
-    if (std::count_if(capillary_settings.begin(), capillary_settings.end(),
-                      [](char c) { return c == ','; }) != 2) {
-      std::cerr << "--capillary must have the format <x>,<y>,<radius>";
-      return 1;
-    }
+  // Convert some of the parsed options
+  std::filesystem::path path(CLI::to_path(inname));
+  std::filesystem::path output_dir;
+  cv::Vec3f capillary(_capillary[0], _capillary[1], _capillary[2]);
 
-    std::istringstream iss(capillary_settings);
-    std::string tok;
-    int i = 0;
-    while (std::getline(iss, tok, ',')) {
-      capillary[i++] = std::stod(tok);
-    }
-  }
-
-  if (argc < 2 || !parser.success()) {
-    std::cerr << "Usage: lpcpp FILE [options]" << std::endl;
-    std::cerr << "Version: " << CMAKE_PROJECT_VERSION << std::endl;
-    std::cerr << "Options:" << std::endl;
-    std::cerr << parser;
+  if (!std::filesystem::exists(path)) {
+    std::cerr << "input video file" << path << "does not exist" << std::endl;
     return 1;
   }
+  if (outname.empty()) {
+    output_dir = path.parent_path() / "processed";
+  } else {
+    output_dir = CLI::to_path(outname);
+    if (std::filesystem::exists(output_dir) &&
+        !std::filesystem::is_directory(output_dir)) {
+      std::cerr << "output path" << output_dir << "is not a directory"
+                << std::endl;
+      return 1;
+    }
+  }
 
-  std::filesystem::path path(argv[1]);
+  if (app.get_config_ptr() && app.get_config_ptr()->count()) {
+    std::cout << app.get_config_ptr()->as<std::string>() << std::endl;
+  }
 
   // create capture and read some props
   auto cap = cv::VideoCapture(path.string(), cv::CAP_FFMPEG);
@@ -106,18 +139,6 @@ int main(int argc, char *argv[]) {
   int frame_count = cap.get(cv::CAP_PROP_FRAME_COUNT);
 
   // create output directory
-  std::filesystem::path output_dir;
-  if (output_path.empty())
-    output_dir = path.parent_path() / "processed";
-  else {
-    output_dir = std::filesystem::path(output_path);
-    if (std::filesystem::exists(output_path) &&
-        !std::filesystem::is_directory(output_path)) {
-      std::cerr << "output path" << output_dir << "is not a directory"
-                << std::endl;
-      return 1;
-    }
-  }
 
   std::filesystem::create_directory(output_dir);
   auto image_dir = output_dir / "particles";
@@ -144,10 +165,11 @@ int main(int argc, char *argv[]) {
   std::cout << "\tframes = " << frame_count << std::endl;
   std::cout << "\tsize = " << width << " x " << height << std::endl;
 
-  if (capillary[2] == 0.0) {
+  // If radius is zero, try to find from image
+  if (capillary[2] == 0.f) {
     capillary = find_capillary(frame);
   }
-  if (capillary[2] == 0.0) {
+  if (capillary[2] == 0.f) {
     std::cerr << "\tcould not detect capillary" << std::endl;
     return 1;
   } else {
@@ -170,7 +192,7 @@ int main(int argc, char *argv[]) {
   // begin by reading the required number of frames to predict the background
   init_background(cap, acc_mean, acc_var, background_frames);
 
-  if (draw_frames) {
+  if (draw) {
     cv::namedWindow("frame", cv::WINDOW_NORMAL);
     // cv::namedWindow("diff", cv::WINDOW_NORMAL);
   };
@@ -222,7 +244,7 @@ int main(int argc, char *argv[]) {
     particles.push_back(new_particles);
 
     // create a color image and draw the contuors
-    if (draw_frames) {
+    if (draw) {
       cv::UMat rgb_frame;
       draw_particles_on_frame(frame, rgb_frame, particles.rbegin(),
                               particles.rend(), particle_frames);
