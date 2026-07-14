@@ -43,25 +43,33 @@ int main(int argc, char *argv[]) {
   filter_args particle_filter_args;
 
   app.add_option("file", inname, "path to the captured OIM video")
+      ->required()
       ->check(CLI::ExistingFile)
       ->configurable(false);
   app.add_option("--output,-o", outname,
                  "specify the output directory, defaults to 'processed'")
+      ->check(CLI::NonexistentPath | CLI::ExistingDirectory)
       ->configurable(false);
 
   app.add_option(
-      "--background-frames", background_frames,
-      "number of background frames used to determine initial mean and std");
-  app.add_option("--particle-frames", particle_frames,
-                 "number of frames to track particles after last detection");
-  app.add_option("--particle-distance", particle_distance,
-                 "minimum distance between particles");
+         "--background-frames", background_frames,
+         "number of background frames used to determine initial mean and std")
+      ->check(CLI::PositiveNumber);
+  app.add_option("--track-frames", particle_frames,
+                 "number of frames to track particles after last detection")
+      ->check(CLI::PositiveNumber);
+  app.add_option("--distance", particle_distance,
+                 "minimum distance between particles")
+      ->check(CLI::PositiveNumber);
   app.add_option("--zscore", zscore,
-                 "number of std above the background mean to threshold");
-  app.add_option("--unsharp", unsharp, "alpha value of the unsharp mask");
+                 "number of std above the background mean to threshold")
+      ->check(CLI::PositiveNumber);
+  app.add_option("--unsharp", unsharp, "alpha value of the unsharp mask")
+      ->check(CLI::NonNegativeNumber);
   app.add_option("--capillary", capillary,
                  "capillary position and radius <x> <y> <radius>. If 0, try to "
-                 "read from video");
+                 "read from video")
+      ->check(CLI::NonNegativeNumber);
 
   app.add_flag("--draw", "show video and detections")->configurable(false);
   ;
@@ -93,11 +101,10 @@ int main(int argc, char *argv[]) {
                  "creates a default config");
 
   try {
-    (app).parse(argc, argv);
+    app.parse(argc, argv);
   } catch (const CLI::FileError &e) {
     std::string conf = app.get_config_ptr()->as<std::string>();
-    std::cout << "config file does not exists, creating default at " << conf
-              << std::endl;
+    std::cout << "writing default config to " << conf << std::endl;
 
     std::ofstream cfs(CLI::to_path(conf));
     cfs << app.config_to_str(true);
@@ -109,24 +116,10 @@ int main(int argc, char *argv[]) {
   // Convert some of the parsed options
   std::filesystem::path path(CLI::to_path(inname));
   std::filesystem::path output_dir;
-  // cv::Vec3f capillary(_capillary[0], _capillary[1], _capillary[2]);
-
-  // validation
-  if (!std::filesystem::exists(path)) {
-    std::cerr << "video file " << path << " does not exist" << std::endl;
-    return 1;
-  }
-
   if (outname.empty()) {
     output_dir = path.parent_path() / "processed";
   } else {
     output_dir = CLI::to_path(outname);
-    if (std::filesystem::exists(output_dir) &&
-        !std::filesystem::is_directory(output_dir)) {
-      std::cerr << "output path " << output_dir << " is not a directory"
-                << std::endl;
-      return 1;
-    }
   }
 
   // create capture and read some props
