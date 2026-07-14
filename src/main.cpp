@@ -118,12 +118,11 @@ int main(int argc, char *argv[]) {
   } catch (const CLI::FileError &e) {
     std::string conf = app.get_config_ptr()->as<std::string>();
     std::cout << "writing default config to " << conf << std::endl;
-
     std::ofstream cfs(CLI::to_path(conf));
     cfs << app.config_to_str(true);
     return 0;
   } catch (const CLI::ParseError &e) {
-    return (app).exit(e);
+    return app.exit(e);
   }
 
   // Convert some of the parsed options
