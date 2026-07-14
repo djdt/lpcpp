@@ -68,6 +68,8 @@ int main(int argc, char *argv[]) {
   app.add_flag("--export-images", "export an image of each particle")
       ->configurable(false);
   ;
+  app.set_version_flag("--version,-v", CMAKE_PROJECT_VERSION,
+                       "display version and exit");
 
   auto filter_cmd =
       app.add_subcommand("filter", "options for filtering particles");
