@@ -68,33 +68,34 @@ int main(int argc, char *argv[]) {
       ->configurable(false);
   ;
 
-  auto filter_sub =
+  auto filter_cmd =
       app.add_subcommand("filter", "options for filtering particles");
-  filter_sub->add_option("--area", particle_filter_args.area,
+  filter_cmd->add_option("--area", particle_filter_args.area,
                          "allowed particle area");
-  filter_sub->add_option("--aspect", particle_filter_args.aspect,
+  filter_cmd->add_option("--aspect", particle_filter_args.aspect,
                          "allowed particle aspect ratio");
-  filter_sub->add_option("--circularity", particle_filter_args.aspect,
+  filter_cmd->add_option("--circularity", particle_filter_args.aspect,
                          "allowed particle circularity");
-  filter_sub->add_option("--convexity", particle_filter_args.aspect,
+  filter_cmd->add_option("--convexity", particle_filter_args.aspect,
                          "allowed particle convexity");
-  filter_sub->add_option("--intensity", particle_filter_args.aspect,
+  filter_cmd->add_option("--intensity", particle_filter_args.aspect,
                          "allowed particle intensity (darkness)");
-  filter_sub->add_option("--radius", particle_filter_args.aspect,
+  filter_cmd->add_option("--radius", particle_filter_args.aspect,
                          "allowed particle radius");
-  filter_sub->add_option("--sharpness", particle_filter_args.aspect,
+  filter_cmd->add_option("--sharpness", particle_filter_args.aspect,
                          "allowed particle sharpness");
 
   app.set_config("--config", "", "read options from a config file");
 
-  auto conf_sub = app.add_subcommand("make_config");
+  auto conf_sub =
+      app.add_subcommand("make_config", "create a default config file");
   conf_sub->add_option("output", confname, "write default config to the file")
+      ->required(true)
       ->configurable(false);
-  ;
 
   CLI11_PARSE(app, argc, argv);
 
-  if (!confname.empty()) {
+  if (conf_sub->parsed()) {
     std::filesystem::path confpath(CLI::to_path(confname));
     std::ofstream cfs(confpath);
     cfs << app.config_to_str(true);
@@ -106,6 +107,10 @@ int main(int argc, char *argv[]) {
   std::filesystem::path output_dir;
   cv::Vec3f capillary(_capillary[0], _capillary[1], _capillary[2]);
 
+  if (!std::filesystem::exists(path)) {
+    std::cerr << "input video file" << path << "does not exist" << std::endl;
+    return 1;
+  }
   if (outname.empty()) {
     output_dir = path.parent_path() / "processed";
   } else {
