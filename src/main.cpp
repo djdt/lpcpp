@@ -75,9 +75,11 @@ int main(int argc, char *argv[]) {
                  "read from video")
       ->check(CLI::NonNegativeNumber);
 
-  app.add_flag("--draw", "show video and detections")->configurable(false);
+  app.add_flag("--draw", draw, "show video and detections")
+      ->configurable(false);
   ;
-  app.add_flag("--export-images", "export an image of each particle")
+  app.add_flag("--export-images", export_images,
+               "export an image of each particle")
       ->configurable(false);
   ;
   app.set_version_flag("--version,-v", CMAKE_PROJECT_VERSION,
