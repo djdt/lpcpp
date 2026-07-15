@@ -2,10 +2,14 @@
 #include <fstream>
 #include <iostream>
 
+#include <opencv2/core.hpp>
+#include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <vector>
 
+#include "contours.hpp"
+#include "cpuproc.hpp"
 #include "particle.hpp"
 
 void write_particle_header(std::ofstream &ofs) {
@@ -17,47 +21,70 @@ void write_particle_header(std::ofstream &ofs) {
 
 void write_particle_data(const std::vector<Particle> &particles,
                          std::ofstream &ofs) {
+  cv::Mat mask;
   for (auto it = particles.begin(); it != particles.end(); ++it) {
+    const std::vector<cv::Point> &contour = it->contour();
+    cv::Moments moments = cv::moments(contour);
+    mask_for_contour(contour, mask);
+
     ofs << it->id() << ",";
-    ofs << it->frameNumber() << ",";
+    ofs << it->frame() << ",";
     ofs << it->frameCount() << ",";
-    ofs << it->area() << ",";
-    ofs << it->aspect() << ",";
-    ofs << it->circularEquvalentDiameter() << ",";
-    ofs << it->circularity() << ",";
-    ofs << it->convexity() << ",";
-    ofs << it->intensity() << ",";
-    ofs << it->maximumWidth() << ",";
-    ofs << it->minimumWidth() << ",";
-    ofs << it->perimeter() << ",";
-    ofs << it->radius() << ",";
-    ofs << it->sharpness() << ",";
-    ofs << it->center().y << ",";
-    ofs << it->center().x << std::endl;
+    ofs << moments.m00 << ",";
+    ofs << contour_aspect(contour) << ",";
+    ofs << contour_circular_equivalent_diameter(contour, moments.m00) << ",";
+    ofs << contour_circularity(contour, moments.m00) << ",";
+    ofs << contour_convexity(contour, moments.m00) << ",";
+    ofs << image_intensity(it->image(), mask) << ",";
+    ofs << contour_maximum_feret(contour) << ",";
+    ofs << contour_minimum_feret(contour) << ",";
+    ofs << cv::arcLength(contour, true) << ",";
+    ofs << image_sharpness(it->image(), mask) << ",";
+    ofs << moments.m10 / moments.m00 << ",";
+    ofs << moments.m01 / moments.m00 << std::endl;
   }
 }
 
-bool write_particle_images(const std::vector<Particle> &particles,
-                           const std::filesystem::path &output_dir) {
+bool save_particle_image(const Particle &particle,
+                         const std::filesystem::path &path) {
   auto color = cv::Scalar(0, 0, 255);
-  for (auto it = particles.begin(); it != particles.end(); ++it) {
-    auto out = output_dir / std::to_string(it->id()).append(".png");
-    cv::Mat image, raw_image;
-    it->image().convertTo(image, CV_8U);
-    it->rawImage().convertTo(raw_image, CV_8U);
-
-    cv::Mat bgr = cv::Mat::zeros(image.rows, image.cols, CV_8UC3);
-    cv::insertChannel(image, bgr, 1);
-    cv::insertChannel(raw_image, bgr, 0);
-
-    cv::Mat fill = cv::Mat::zeros(image.rows, image.cols, CV_8U);
-    // cv::polylines(rgb, it->imageContour(), -1, color, 1.0, 8);
-    cv::fillPoly(fill, it->imageContour(), 255);
-    cv::insertChannel(fill, bgr, 2);
-    if (not cv::imwrite(out.string(), bgr)) {
-      std::cerr << "failed to save " << out << std::endl;
-      return true;
-    }
+  cv::Mat image, raw_image, mask;
+  particle.image().convertTo(image, CV_8U);
+  particle.rawImage().convertTo(raw_image, CV_8U);
+  mask_for_contour(particle.contour(), mask);
+  const cv::Mat src[] = {image, raw_image, mask};
+  cv::Mat dst;
+  cv::merge(src, 3, dst);
+  if (not cv::imwrite(path.string(), dst)) {
+    std::cerr << "failed to save " << path << std::endl;
+    return true;
   }
   return false;
 }
+
+// bool write_particle_images(const std::vector<Particle> &particles,
+//                            const std::filesystem::path &output_dir) {
+//   auto color = cv::Scalar(0, 0, 255);
+//   for (auto it = particles.begin(); it != particles.end(); ++it) {
+//     auto out = output_dir / std::to_string(it->id()).append(".png");
+//     cv::Mat image, raw_image;
+//     it->image().convertTo(image, CV_8U);
+//     it->rawImage().convertTo(raw_image, CV_8U);
+//
+//     cv::Mat bgr = cv::Mat::zeros(image.rows, image.cols, CV_8UC3);
+//     cv::insertChannel(image, bgr, 1);
+//     cv::insertChannel(raw_image, bgr, 0);
+//
+//     cv::Mat fill = cv::Mat::zeros(image.rows, image.cols, CV_8U);
+//     cv::Mat mask;
+//     mask_for_contour(it->contour(), mask);
+//     // cv::polylines(rgb, it->imageContour(), -1, color, 1.0, 8);
+//     cv::fillPoly(fill, it->imageContour(), 255);
+//     cv::insertChannel(fill, bgr, 2);
+//     if (not cv::imwrite(out.string(), bgr)) {
+//       std::cerr << "failed to save " << out << std::endl;
+//       return true;
+//     }
+//   }
+//   return false;
+// }

@@ -1,10 +1,12 @@
 #include "contours.hpp"
 #include "cpuproc.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <execution>
-#include <numeric>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
+#include <opencv2/imgproc.hpp>
 
 double contour_aspect(const std::vector<cv::Point> &contour) {
   cv::RotatedRect rect = cv::minAreaRect(contour);
@@ -15,8 +17,9 @@ double contour_aspect(const std::vector<cv::Point> &contour) {
   return aspect;
 }
 
-double contour_circular_diameter(const std::vector<cv::Point> &contour,
-                                 const double area) {
+double
+contour_circular_equivalent_diameter(const std::vector<cv::Point> &contour,
+                                     const double area) {
   if (area < 0.0)
     double area = cv::contourArea(contour);
   return std::sqrt((4.0 * area) / std::numbers::pi);
@@ -27,7 +30,7 @@ double contour_circularity(const std::vector<cv::Point> &contour,
   if (area < 0.0)
     double area = cv::contourArea(contour);
   auto perim = cv::arcLength(contour, true);
-  return 4.0 * std::numbers::pi * area / std::pow(perim, 2);
+  return std::sqrt(4.0 * std::numbers::pi * area / std::pow(perim, 2));
 }
 
 double contour_convexity(const std::vector<cv::Point> &contour,
@@ -39,25 +42,27 @@ double contour_convexity(const std::vector<cv::Point> &contour,
 
 double contour_distance(const std::vector<cv::Point> &contour,
                         const cv::Point2f &pos) {
-  double dist = std::accumulate(contour.begin(), contour.end(), 0.0,
-                                [&pos](double sum, const cv::Point2f &p) {
-                                  return sum + cv::norm(p - pos);
-                                });
-  return dist / contour.size();
-}
-
-double contour_edge_distance(const std::vector<cv::Point> &contour,
-                             const cv::Point2f &pos) {
   double dist = cv::pointPolygonTest(contour, pos, true);
-  return dist;
+  return -dist;
 }
 
-double contour_maximum_width(const std::vector<cv::Point> &contour) {
+double contour_distance(const std::vector<cv::Point> &contour,
+                        const std::vector<cv::Point> &contour2) {
+  // possible to approximate with getClosestEllipsePoints
+  std::vector<double> dists;
+  std::transform(std::execution::par, contour.begin(), contour.end(),
+                 dists.begin(), [&contour2](const cv::Point &p) {
+                   return cv::pointPolygonTest(contour2, p, true);
+                 });
+  return -(*std::max_element(dists.begin(), dists.end()));
+}
+
+double contour_maximum_feret(const std::vector<cv::Point> &contour) {
   auto rect = cv::minAreaRect(contour);
   return std::max(rect.size.width, rect.size.height);
 }
 
-double contour_minimum_width(const std::vector<cv::Point> &contour) {
+double contour_minimum_feret(const std::vector<cv::Point> &contour) {
   auto rect = cv::minAreaRect(contour);
   return std::min(rect.size.width, rect.size.height);
 }

@@ -14,6 +14,7 @@
 
 #include "CLI11.hpp"
 
+#include "contours.hpp"
 #include "cpuproc.hpp"
 #include "io.hpp"
 #include "particle.hpp"
@@ -262,17 +263,16 @@ int main(int argc, char *argv[]) {
         [&](const std::vector<cv::Point> &contour) {
           bool existing = false;
           for (auto &particle : particles) {
-            double dist =
-                cv::pointPolygonTest(contour, particle.center(), true);
+            double dist = contour_distance(contour, particle.contour());
             if (dist < particle_distance) {
-              particle.update(contour, cpu_proc, frame_pos, cpu_frame);
+              particle.update(frame_pos, contour, cpu_proc, cpu_frame);
               existing = true;
               break;
             }
           }
           if (!existing) {
             particles.push_back(
-                Particle(contour, cpu_proc, frame_pos, cpu_frame));
+                Particle(frame_pos, contour, cpu_proc, cpu_frame));
           }
         });
 

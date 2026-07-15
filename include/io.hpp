@@ -11,11 +11,11 @@
 void write_particle_header(std::ofstream &ofs);
 void write_particle_data(const std::vector<Particle> &particles,
                          std::ofstream &ofs);
-bool write_particle_images(const std::vector<Particle> &particles,
-                           const std::filesystem::path &output_dir);
+// bool write_particle_images(const std::vector<Particle> &particles,
+//                            const std::filesystem::path &output_dir);
 
-void write_filter_config(const std::string &path, const filter_args &args);
-bool read_filter_config(const std::string &path, filter_args &args);
+bool save_particle_image(const Particle &particle,
+                         const std::filesystem::path &path);
 
 template <typename Iter>
 void draw_particles_on_frame(cv::InputArray &input,

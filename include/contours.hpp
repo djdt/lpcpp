@@ -22,21 +22,24 @@ double contour_aspect(const std::vector<cv::Point> &contour);
 double contour_weighted_intensity(const std::vector<cv::Point> &contour,
                                   cv::InputArray &image,
                                   const cv::Point &offset = cv::Point());
-double contour_circular_diameter(const std::vector<cv::Point> &contour,
-                                 const double area = -1.0);
+double
+contour_circular_equivalent_diameter(const std::vector<cv::Point> &contour,
+                                     const double area = -1.0);
 double contour_circularity(const std::vector<cv::Point> &contour,
                            const double area = -1.0);
 double contour_convexity(const std::vector<cv::Point> &contour,
                          const double area = -1.0);
 double contour_distance(const std::vector<cv::Point> &contour,
                         const cv::Point2f &pos);
+double contour_distance(const std::vector<cv::Point> &contour,
+                        const std::vector<cv::Point> &contour2);
 double contour_edge_distance(const std::vector<cv::Point> &contour,
                              const cv::Point2f &pos);
 double contour_intensity(const std::vector<cv::Point> &contour,
                          cv::InputArray &image,
                          const cv::Point &offset = cv::Point(0, 0));
-double contour_maximum_width(const std::vector<cv::Point> &contour);
-double contour_minimum_width(const std::vector<cv::Point> &contour);
+double contour_maximum_feret(const std::vector<cv::Point> &contour);
+double contour_minimum_feret(const std::vector<cv::Point> &contour);
 
 void filter_contours(std::vector<std::vector<cv::Point>> &contours,
                      const cv::Mat &frame, struct filter_args args);
