@@ -1,5 +1,3 @@
-#include <algorithm>
-#include <execution>
 #include <iomanip>
 #include <iostream>
 #include <opencv2/core.hpp>
@@ -10,7 +8,6 @@
 #include <opencv2/videoio.hpp>
 #include <vector>
 
-#include "particle.hpp"
 #include "util.hpp"
 
 std::array<float, 3> find_capillary(cv::InputArray &input) {
@@ -23,6 +20,30 @@ std::array<float, 3> find_capillary(cv::InputArray &input) {
     return {0.f, 0.f, 0.f};
   }
   return {circles[0][0], circles[0][1], circles[0][2]};
+}
+
+double image_center_weighted_intensity(cv::InputArray &image,
+                                       cv::InputArray &mask,
+                                       cv::OutputArray &weights) {
+  weights.createSameSize(image, CV_32F);
+  cv::distanceTransform(mask, weights, cv::DIST_L2, cv::DIST_MASK_3);
+  cv::multiply(weights, image, weights, 1.0 / cv::sum(weights)[0]);
+  return cv::sum(weights)[0];
+}
+
+double image_intensity(cv::InputArray &image, cv::InputArray &mask) {
+  if (mask.empty()) {
+    return cv::sum(image)[0];
+  }
+  return cv::mean(image, mask)[0] * cv::countNonZero(mask);
+}
+
+double image_sharpness(cv::InputArray &image, cv::OutputArray &laplace) {
+  laplace.createSameSize(image, CV_32F);
+  cv::Laplacian(image, laplace, CV_32F);
+  cv::Scalar mu, sigma;
+  cv::meanStdDev(laplace, mu, sigma);
+  return sigma[0];
 }
 
 void unsharp_mask(cv::InputArray &image, cv::OutputArray &output,
@@ -110,63 +131,48 @@ void preprocess_and_threshold(cv::InputArray &frame, cv::InputArray &mean,
   cv::compare(processed, std, threshold, cv::CMP_GT);
 }
 
-double image_sharpness(const cv::Mat &image) {
-  cv::Mat laplace;
-  cv::Laplacian(image, laplace, CV_32F);
-  cv::Scalar mu, sigma;
-  cv::meanStdDev(laplace, mu, sigma);
-  return sigma[0];
-}
-
-double center_weighted_intensity(cv::InputArray &image, cv::InputArray &mask,
-                                 cv::OutputArray &weights) {
-  weights.create(image.size(), CV_32F);
-  cv::distanceTransform(mask, weights, cv::DIST_L2, cv::DIST_MASK_3);
-  cv::multiply(weights, image, weights, 1.0 / cv::sum(weights)[0]);
-  return cv::sum(weights)[0];
-}
-
-void filter_existing_particles(
-    std::vector<Particle> &old_particles, std::vector<Particle> &new_particles,
-    const std::function<bool(const Particle &, const Particle &)> comparison,
-    const double edge_distance) {
-  std::vector<size_t> remove_new_at;
-  old_particles.erase(
-      std::remove_if(
-          std::execution::seq, old_particles.begin(), old_particles.end(),
-          [&](Particle &old) {
-            for (auto it_new = new_particles.begin();
-                 it_new != new_particles.end(); ++it_new) {
-
-              if (it_new->isClose(old, edge_distance)) {
-
-                if (comparison(*it_new, old)) {
-                  it_new->addFrames(
-                      old.frameCount()); // inherit old particle count
-                  return true;           // old is removed
-                } else {
-                  // remove new
-                  size_t idx = std::distance(new_particles.begin(), it_new);
-                  if (remove_new_at.size() == 0 or
-                      remove_new_at.back() != idx) {
-                    remove_new_at.push_back(idx);
-                  }
-                  old.addFrames(1);
-                  return false;
-                }
-              }
-            }
-            return false;
-          }),
-      old_particles.end());
-
-  // sort and remove non-unqiue indicies
-  std::sort(remove_new_at.begin(), remove_new_at.end());
-  auto last = std::unique(remove_new_at.begin(), remove_new_at.end());
-  remove_new_at.erase(last, remove_new_at.end());
-
-  new_particles.erase(remove_indices(new_particles.begin(), new_particles.end(),
-                                     remove_new_at.begin(),
-                                     remove_new_at.end()),
-                      new_particles.end());
-}
+// void filter_existing_particles(
+//     std::vector<Particle> &old_particles, std::vector<Particle>
+//     &new_particles, const std::function<bool(const Particle &, const Particle
+//     &)> comparison, const double edge_distance) {
+//   std::vector<size_t> remove_new_at;
+//   old_particles.erase(
+//       std::remove_if(
+//           std::execution::seq, old_particles.begin(), old_particles.end(),
+//           [&](Particle &old) {
+//             for (auto it_new = new_particles.begin();
+//                  it_new != new_particles.end(); ++it_new) {
+//
+//               if (it_new->isClose(old, edge_distance)) {
+//
+//                 if (comparison(*it_new, old)) {
+//                   it_new->addFrames(
+//                       old.frameCount()); // inherit old particle count
+//                   return true;           // old is removed
+//                 } else {
+//                   // remove new
+//                   size_t idx = std::distance(new_particles.begin(), it_new);
+//                   if (remove_new_at.size() == 0 or
+//                       remove_new_at.back() != idx) {
+//                     remove_new_at.push_back(idx);
+//                   }
+//                   old.addFrames(1);
+//                   return false;
+//                 }
+//               }
+//             }
+//             return false;
+//           }),
+//       old_particles.end());
+//
+//   // sort and remove non-unqiue indicies
+//   std::sort(remove_new_at.begin(), remove_new_at.end());
+//   auto last = std::unique(remove_new_at.begin(), remove_new_at.end());
+//   remove_new_at.erase(last, remove_new_at.end());
+//
+//   new_particles.erase(remove_indices(new_particles.begin(),
+//   new_particles.end(),
+//                                      remove_new_at.begin(),
+//                                      remove_new_at.end()),
+//                       new_particles.end());
+// }

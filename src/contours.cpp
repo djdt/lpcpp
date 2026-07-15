@@ -1,4 +1,5 @@
 #include "contours.hpp"
+#include "cpuproc.hpp"
 
 #include <execution>
 #include <numeric>
@@ -102,26 +103,27 @@ void filter_contours(std::vector<std::vector<cv::Point>> &contours,
                 return true;
               }
             }
-            if (args.intensity.first != args.intensity.second) {
+            // image based operations
+            if ((args.intensity.first != args.intensity.second) ||
+                (args.sharpness.first != args.sharpness.second)) {
+              cv::Mat mask;
               cv::Rect rect = cv::boundingRect(c);
-              cv::Mat mask = cv::Mat::zeros(rect.size(), CV_8U);
-              cv::Mat image = cv::Mat::zeros(rect.size(), CV_8U);
-              cv::drawContours(mask, {c}, 0, 255, -1, cv::LINE_8, cv::noArray(),
-                               0, -rect.tl());
+              mask_for_contour(c, mask);
 
-              frame(rect).copyTo(image, mask);
-              double intensity = cv::sum(intensity)[0];
-              if (intensity < args.intensity.first or
-                  intensity > args.intensity.second) {
-                return true;
+              if (args.intensity.first != args.intensity.second) {
+                double intensity = image_intensity(frame(rect), mask);
+                if (intensity < args.intensity.first or
+                    intensity > args.intensity.second) {
+                  return true;
+                }
               }
-            }
-            if (args.sharpness.first != args.sharpness.second) {
-              cv::Rect rect = cv::boundingRect(c);
-              double sharpness = image_sharpness(frame(rect));
-              if (sharpness < args.sharpness.first or
-                  sharpness > args.sharpness.second) {
-                return true;
+              if (args.sharpness.first != args.sharpness.second) {
+                cv::Mat laplace;
+                double sharpness = image_sharpness(frame(rect), laplace);
+                if (sharpness < args.sharpness.first or
+                    sharpness > args.sharpness.second) {
+                  return true;
+                }
               }
             }
             return false;

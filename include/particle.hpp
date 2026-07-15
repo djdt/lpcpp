@@ -5,27 +5,30 @@
 #include <opencv2/core/types.hpp>
 #include <vector>
 
-enum particle_metric { CENTER_WEIGHTED_INTENSITY, INTENSITY, SHARPNESS };
+enum ParticleMetric { CENTER_WEIGHTED_INTENSITY = 0, INTENSITY = 1, SHARPNESS };
 
 class Particle {
 private:
   static long id_counter;
-  long _id;
+  const long _id;
+
+  const ParticleMetric _metric_method;
   double _metric;
-  size_t _index;
 
   std::vector<cv::Mat> _images;
   std::vector<cv::Mat> _raw_images;
   std::vector<std::vector<cv::Point>> _contours;
   std::vector<int> _frames;
 
+  size_t _index;
+
 public:
   // ensure a cv::Mat here
-  Particle(int frame_number, const std::vector<cv::Point> &contour,
+  Particle(const int frame_number, const std::vector<cv::Point> &contour,
            const cv::Mat &image, const cv::Mat &raw_image,
-           particle_metric metric = CENTER_WEIGHTED_INTENSITY);
+           ParticleMetric metric = CENTER_WEIGHTED_INTENSITY);
 
-  void update(int frame_number, const std::vector<cv::Point> &contour,
+  void update(const int frame_number, const std::vector<cv::Point> &contour,
               const cv::Mat &image, const cv::Mat &raw_image);
 
   const int frameCount() const;
@@ -39,5 +42,4 @@ public:
 };
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,
-                                  cv::InputArray &image,
-                                  particle_metric metric);
+                                  cv::InputArray &image, ParticleMetric metric);
