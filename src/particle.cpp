@@ -1,37 +1,43 @@
 #include "particle.hpp"
 
-#include <numeric>
 #include <numbers>
+#include <numeric>
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#include <vector>
 
-Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &frame,
-                   int frame_number)
-    : _contour(contour), _frame(frame_number), _frame_count(1),
-      _id(id_counter++) {
+Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &image,
+                   int frame_number, const cv::Mat &raw_image)
+    : _id(id_counter++) {
   // moments for center and area
-  _moments = cv::moments(_contour);
+  _contours.push_back(contour);
+  _frames.push_back(frame_number);
+  _frame_index = 0;
 
-  _rect = cv::boundingRect(_contour);
+  _moments = cv::moments(contour);
 
-  _rect -= cv::Point(_rect.size()) * 0.5;
-  _rect += _rect.size();
-  _rect &= cv::Rect(0, 0, frame.cols, frame.rows);
+  _rect = cv::boundingRect(contour);
 
-  _image = frame(_rect).clone();
+  // _rect -= cv::Point(_rect.size()) * 0.5;
+  // _rect += _rect.size();
+  _rect &= cv::Rect(0, 0, image.cols, image.rows);
 
-  _mask = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
-  cv::drawContours(_mask, {_contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
-                   -_rect.tl());
-
-  _min_area_rect = cv::minAreaRect(_contour);
+  _image = image(_rect).clone();
+  // _mask = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
+  // cv::drawContours(_mask, {contour}, 0, 255, -1, cv::LINE_8, cv::noArray(),
+  // 0,
+  //                  -_rect.tl());
 };
 
-const std::vector<cv::Point> &Particle::contour() const { return _contour; }
+const std::vector<cv::Point> &Particle::contour() const {
+  return _contours[_frame_index];
+}
 
-int Particle::frameCount() const { return _frame_count; }
+int Particle::frameCount() const { return _frames.size(); }
 
-const int Particle::frameNumber() const { return _frame; }
+const int Particle::frameNumber() const { return _frames[_frame_index]; }
 
 const long Particle::id() const { return _id; }
 
@@ -103,15 +109,17 @@ const double Particle::minimumWidth() const {
 }
 
 const double Particle::perimeter() const {
-  return cv::arcLength(_contour, true);
+  return cv::arcLength(contour(), true);
 }
 
 double Particle::radius() const {
-  const cv::Point2f c = center();
-  double dist = std::accumulate(
-      _contour.begin(), _contour.end(), 0.0,
-      [&c](double sum, const cv::Point2f &p) { return sum + cv::norm(p - c); });
-  return dist / _contour.size();
+  const cv::Point2f pc = center();
+  const std::vector<cv::Point> &c = contour();
+  double dist = std::accumulate(c.begin(), c.end(), 0.0,
+                                [&pc](double sum, const cv::Point2f &p) {
+                                  return sum + cv::norm(p - pc);
+                                });
+  return dist / c.size();
 }
 
 double Particle::sharpness() const {
@@ -128,11 +136,29 @@ void Particle::setRawImage(const cv::Mat &frame) {
   _image_raw = frame(_rect).clone();
 }
 
+void Particle::update(const std::vector<cv::Point> &contour,
+                      const cv::Mat &image, const int frame_number,
+                      const cv::Mat &raw_image) {
+  _contours.push_back(contour);
+  _frames.push_back(frame_number);
+
+  cv::Rect rect = cv::boundingRect(contour);
+  cv::Mat mask = cv::Mat::zeros(rect.size(), CV_8U);
+
+  double intensity = center_weighted_intensity(contour, image);
+  if (intensity > _intensity) {
+    _frame_index = _frames.size();
+    cv::Rect rect = cv::boundingRect(contour);
+    _image = image(rect).clone();
+    if (~raw_image.empty())
+      _image_raw = raw_image(rect).clone();
+  }
+}
+
 // Comparison
 bool Particle::isClose(const Particle &b, const double edge_distance) {
   return cv::norm(center() - b.center()) - radius() - b.radius() <
          edge_distance;
 };
-
 
 long Particle::id_counter = 0;

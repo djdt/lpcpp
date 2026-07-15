@@ -1,6 +1,8 @@
 #include <array>
 #include <opencv2/core.hpp>
+#include <opencv2/core/types.hpp>
 #include <opencv2/videoio.hpp>
+#include <vector>
 
 #include "particle.hpp"
 
@@ -14,14 +16,18 @@ void update_background(cv::InputArray &frame, cv::InputOutputArray &mean,
 bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
                      cv::InputOutputArray &var, int frame_count);
 
-void find_particles(cv::InputArray &frame, cv::InputArray &mean,
-                    cv::InputArray &var, const double zscore,
-                    cv::InputArray &mask, const double unsharp_alpha,
-                    std::vector<Particle> &particles, const int current_frame);
+void niblack_threshold(cv::InputArray &image, cv::InputArray &mean,
+                       cv::InputArray &var, cv::OutputArray &threshold,
+                       const double zscore = 3.0);
+// void find_contours(cv::InputArray &frame, cv::InputArray &mean,
+//                    cv::InputArray &var, const double zscore,
+//                    cv::InputArray &mask, const double unsharp_alpha,
+//                    std::vector<std::vector<cv::Point>> &contours);
 
 /* Filters particles by property, removing failing from the vector.
  * To enabled a filter pass different min and max values. */
-void filter_particles(std::vector<Particle> &particles, struct filter_args);
+void filter_contours(std::vector<std::vector<cv::Point>> &contours,
+                     const cv::Mat &frame, struct filter_args);
 
 /* Filters particles in that already exist in old_particles, by edge distance.
  * A comparison is used to choose which of the new or old particles is kept. */

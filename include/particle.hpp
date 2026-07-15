@@ -5,7 +5,6 @@
 
 class Particle {
 private:
-  std::vector<cv::Point> _contour;
   cv::Mat _image;
   cv::Mat _image_raw;
   cv::Mat _mask;
@@ -15,10 +14,12 @@ private:
   static long id_counter;
 
   long _id;
-  int _frame;
   int _frame_count;
 
   cv::Moments _moments;
+
+  std::vector<std::vector<cv::Point>> _contours;
+  std::vector<int> _frames;
 
 public:
   // ensure a cv::Mat here

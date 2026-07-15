@@ -4,7 +4,9 @@
 #include <fstream>
 #include <iostream>
 #include <opencv2/core.hpp>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/core/matx.hpp>
+#include <opencv2/core/types.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <string>
@@ -42,7 +44,7 @@ int main(int argc, char *argv[]) {
   bool draw = false;
   bool export_images = false;
 
-  filter_args particle_filter_args;
+  filter_args contour_filter_args;
 
   app.add_option("file", inname, "path to the captured OIM video")
       ->required()
@@ -85,30 +87,30 @@ int main(int argc, char *argv[]) {
       app.add_subcommand("filter", "options for filtering particles");
   filter_cmd->configurable();
   filter_cmd
-      ->add_option("--area", particle_filter_args.area, "allowed particle area")
+      ->add_option("--area", contour_filter_args.area, "allowed particle area")
       ->check(CLI::NonNegativeNumber);
   filter_cmd
-      ->add_option("--aspect", particle_filter_args.aspect,
+      ->add_option("--aspect", contour_filter_args.aspect,
                    "allowed particle aspect ratio")
       ->check(CLI::Range(0.0, 1.0));
   filter_cmd
-      ->add_option("--circularity", particle_filter_args.circularity,
+      ->add_option("--circularity", contour_filter_args.circularity,
                    "allowed particle circularity")
       ->check(CLI::Range(0.0, 1.0));
   filter_cmd
-      ->add_option("--convexity", particle_filter_args.convexity,
+      ->add_option("--convexity", contour_filter_args.convexity,
                    "allowed particle convexity")
       ->check(CLI::Range(0.0, 1.0));
   filter_cmd
-      ->add_option("--intensity", particle_filter_args.intensity,
+      ->add_option("--intensity", contour_filter_args.intensity,
                    "allowed particle intensity (darkness)")
       ->check(CLI::NonNegativeNumber);
   filter_cmd
-      ->add_option("--radius", particle_filter_args.radius,
+      ->add_option("--radius", contour_filter_args.radius,
                    "allowed particle radius")
       ->check(CLI::NonNegativeNumber);
   filter_cmd
-      ->add_option("--sharpness", particle_filter_args.sharpness,
+      ->add_option("--sharpness", contour_filter_args.sharpness,
                    "allowed particle sharpness")
       ->check(CLI::NonNegativeNumber);
 
@@ -166,7 +168,7 @@ int main(int argc, char *argv[]) {
   write_particle_header(results_output);
 
   // load a frame and find the ROI
-  cv::UMat frame, mask;
+  cv::UMat frame, diff, mask;
   cap.read(frame);
   mask = cv::UMat::zeros(frame.rows, frame.cols, CV_8U);
 
@@ -213,8 +215,9 @@ int main(int argc, char *argv[]) {
   start_time = std::chrono::system_clock::now();
 
   // init the particle vars
-  std::deque<std::vector<Particle>> particles;
-  int particle_count = 0;
+  // std::deque<std::vector<Particle>> particles;
+  // int particle_count = 0;
+  std::vector<Particle> particles;
 
   while (frame_pos < frame_count) {
     cap.read(frame);
@@ -231,27 +234,77 @@ int main(int argc, char *argv[]) {
     }
 
     std::vector<Particle> new_particles;
-    find_particles(frame, acc_mean, acc_var, zscore, mask, unsharp,
-                   new_particles, frame_pos);
-    // filter particle based on parameters
-    filter_particles(new_particles, particle_filter_args);
-    // filter based on last n frames
-    for (auto it = particles.begin(); it != particles.end(); ++it) {
-      filter_existing_particles(
-          *it, new_particles,
-          [](const Particle &a, const Particle &b) {
-            return a.centerWeightedIntensity() > b.centerWeightedIntensity();
-          },
-          particle_distance);
-    }
 
-    // add a raw image to each particle, slow so only if images needed
-    if (export_images) {
-      cv::Mat cpu_frame = frame.getMat(cv::ACCESS_READ);
-      std::for_each(new_particles.begin(), new_particles.end(),
-                    [&cpu_frame](Particle &p) { p.setRawImage(cpu_frame); });
-    }
-    particles.push_back(new_particles);
+    // get the differenct from the mean
+    cv::subtract(frame, acc_mean, diff, cv::noArray(), CV_32F);
+    cv::multiply(diff, -1.f, diff);
+
+    // apply median blur for small defects
+    cv::medianBlur(diff, diff, 5);
+
+    // sharpen image to reduce particle edge blur
+    if (unsharp > 0.0)
+      unsharp_mask(diff, diff, unsharp);
+
+    // threshold using std and mean
+    cv::UMat threshold;
+    niblack_threshold(diff, acc_mean, acc_var, threshold, zscore);
+    cv::bitwise_and(threshold, mask, threshold);
+
+    // get contours
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(threshold, contours, cv::RETR_EXTERNAL,
+                     cv::CHAIN_APPROX_SIMPLE);
+
+    // move the diff image to the CPU, since it gets cropped and is then faster
+    cv::Mat cpu_diff = diff.getMat(cv::ACCESS_READ);
+    // only move frame image if we are exporting, expensive operation
+    cv::Mat cpu_frame;
+    if (export_images)
+      cpu_frame = frame.getMat(cv::ACCESS_READ);
+
+    filter_contours(contours, cpu_diff, contour_filter_args);
+
+    // update_particles(particles, contours);
+    std::for_each(
+        contours.begin(), contours.end(),
+        [&](const std::vector<cv::Point> &contour) {
+          bool existing = false;
+          for (auto &particle : particles) {
+            double dist =
+                cv::pointPolygonTest(contour, particle.center(), true);
+            if (dist < particle_distance) {
+              particle.update(contour, cpu_diff, frame_pos, cpu_frame);
+              existing = true;
+              break;
+            }
+          }
+          if (!existing) {
+            particles.push_back(
+                Particle(contour, cpu_diff, frame_pos, cpu_frame));
+          }
+        });
+
+    // filter particle based on parameters
+    // filter_particles(new_particles, contour_filter_args);
+    // filter based on last n frames
+
+    // for (auto it = particles.begin(); it != particles.end(); ++it) {
+    //   filter_existing_particles(
+    //       *it, new_particles,
+    //       [](const Particle &a, const Particle &b) {
+    //         return a.centerWeightedIntensity() > b.centerWeightedIntensity();
+    //       },
+    //       particle_distance);
+    // }
+    //
+    // // add a raw image to each particle, slow so only if images needed
+    // if (export_images) {
+    //   cv::Mat cpu_frame = frame.getMat(cv::ACCESS_READ);
+    //   std::for_each(new_particles.begin(), new_particles.end(),
+    //                 [&cpu_frame](Particle &p) { p.setRawImage(cpu_frame); });
+    // }
+    // particles.push_back(new_particles);
 
     // create a color image and draw the contuors
     if (draw) {
