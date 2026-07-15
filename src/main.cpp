@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
   int particle_frames = 50;
   double particle_distance = 3.0;
   double zscore = 3.0;
-  double unsharp = 1.0;
+  double unsharp_alpha = 1.0;
   std::array<float, 3> capillary = {0.f, 0.f, 0.f};
 
   bool draw = false;
@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
   app.add_option("--zscore", zscore,
                  "number of std above the background mean to threshold")
       ->check(CLI::PositiveNumber);
-  app.add_option("--unsharp", unsharp, "alpha value of the unsharp mask")
+  app.add_option("--unsharp", unsharp_alpha, "alpha value of the unsharp mask")
       ->check(CLI::NonNegativeNumber);
   app.add_option("--capillary", capillary,
                  "capillary position and radius <x> <y> <radius>. If 0, try to "
@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
   write_particle_header(results_output);
 
   // load a frame and find the ROI
-  cv::UMat frame, diff, mask;
+  cv::UMat frame, mask;
   cap.read(frame);
   mask = cv::UMat::zeros(frame.rows, frame.cols, CV_8U);
 
@@ -221,6 +221,8 @@ int main(int argc, char *argv[]) {
   // int particle_count = 0;
   std::vector<Particle> particles;
 
+  cv::UMat processed, threshold;
+
   while (frame_pos < frame_count) {
     cap.read(frame);
 
@@ -237,21 +239,8 @@ int main(int argc, char *argv[]) {
 
     std::vector<Particle> new_particles;
 
-    // get the differenct from the mean
-    cv::subtract(frame, acc_mean, diff, cv::noArray(), CV_32F);
-    cv::multiply(diff, -1.f, diff);
-
-    // apply median blur for small defects
-    cv::medianBlur(diff, diff, 5);
-
-    // sharpen image to reduce particle edge blur
-    if (unsharp > 0.0)
-      unsharp_mask(diff, diff, unsharp);
-
-    // threshold using std and mean
-    cv::UMat threshold;
-    niblack_threshold(diff, acc_mean, acc_var, threshold, zscore);
-    cv::bitwise_and(threshold, mask, threshold);
+    preprocess_and_threshold(frame, acc_mean, acc_var, processed, threshold,
+                             zscore, unsharp_alpha);
 
     // get contours
     std::vector<std::vector<cv::Point>> contours;
@@ -259,13 +248,13 @@ int main(int argc, char *argv[]) {
                      cv::CHAIN_APPROX_SIMPLE);
 
     // move the diff image to the CPU, since it gets cropped and is then faster
-    cv::Mat cpu_diff = diff.getMat(cv::ACCESS_READ);
+    cv::Mat cpu_proc = processed.getMat(cv::ACCESS_READ);
     // only move frame image if we are exporting, expensive operation
     cv::Mat cpu_frame;
     if (export_images)
       cpu_frame = frame.getMat(cv::ACCESS_READ);
 
-    filter_contours(contours, cpu_diff, contour_filter_args);
+    filter_contours(contours, cpu_proc, contour_filter_args);
 
     // update_particles(particles, contours);
     std::for_each(
@@ -276,14 +265,14 @@ int main(int argc, char *argv[]) {
             double dist =
                 cv::pointPolygonTest(contour, particle.center(), true);
             if (dist < particle_distance) {
-              particle.update(contour, cpu_diff, frame_pos, cpu_frame);
+              particle.update(contour, cpu_proc, frame_pos, cpu_frame);
               existing = true;
               break;
             }
           }
           if (!existing) {
             particles.push_back(
-                Particle(contour, cpu_diff, frame_pos, cpu_frame));
+                Particle(contour, cpu_proc, frame_pos, cpu_frame));
           }
         });
 

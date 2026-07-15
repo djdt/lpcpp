@@ -16,9 +16,12 @@ void update_background(cv::InputArray &frame, cv::InputOutputArray &mean,
 bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
                      cv::InputOutputArray &var, int frame_count);
 
-void niblack_threshold(cv::InputArray &image, cv::InputArray &mean,
-                       cv::InputArray &var, cv::OutputArray &threshold,
-                       const double zscore = 3.0);
+void preprocess_and_threshold(cv::InputArray &frame, cv::InputArray &mean,
+                              cv::InputArray &var, cv::OutputArray &processed,
+                              cv::OutputArray &threshold,
+                              const double zscore = 3.0,
+                              const double unsharp_alpha = 1.0);
+
 // void find_contours(cv::InputArray &frame, cv::InputArray &mean,
 //                    cv::InputArray &var, const double zscore,
 //                    cv::InputArray &mask, const double unsharp_alpha,
@@ -30,7 +33,8 @@ void filter_contours(std::vector<std::vector<cv::Point>> &contours,
                      const cv::Mat &frame, struct filter_args);
 
 /* Filters particles in that already exist in old_particles, by edge distance.
- * A comparison is used to choose which of the new or old particles is kept. */
+ * A comparison is used to choose which of the new or old particles is kept.
+ */
 void filter_existing_particles(
     std::vector<Particle> &old_particles, std::vector<Particle> &new_particles,
     const std::function<bool(const Particle &, const Particle &)> comparision,

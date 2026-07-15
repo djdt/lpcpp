@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <iostream>
 #include <opencv2/core.hpp>
+#include <opencv2/core/hal/interface.h>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgproc.hpp>
@@ -82,69 +83,31 @@ bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
   return false;
 }
 
-void difference_from_mean(cv::InputArray &frame, cv::InputArray &mean,
-                          cv::OutputArray &diff) {
-  cv::subtract(frame, mean, diff, cv::noArray(), CV_32F);
-  cv::multiply(diff, -1.f, diff);
-}
+void preprocess_and_threshold(cv::InputArray &frame, cv::InputArray &mean,
+                              cv::InputArray &var, cv::OutputArray &processed,
+                              cv::OutputArray &threshold, const double zscore,
+                              const double unsharp_alpha) {
+  processed.create(frame.size(), CV_32F);
+  threshold.create(frame.size(), CV_8U);
 
-void niblack_threshold(cv::InputArray &image, cv::InputArray &mean,
-                       cv::InputArray &var, cv::OutputArray &threshold,
-                       const double zscore = 3.0) {
+  frame.copyTo(processed);
+
+  cv::subtract(frame, mean, processed, cv::noArray(), CV_32F);
+  cv::multiply(processed, -1.f, processed);
+
+  // apply median blur for small defects
+  cv::medianBlur(processed, processed, 5);
+
+  // sharpen image to reduce particle edge blur
+  if (unsharp_alpha > 0.0)
+    unsharp_mask(processed, processed, unsharp_alpha);
+
   // mask differences below x std deviations
   cv::UMat std;
   cv::sqrt(var, std);
   cv::multiply(std, zscore, std);
 
-  threshold.create(image.size(), CV_8U);
-  cv::compare(image, std, threshold, cv::CMP_GT);
-}
-
-// void find_contours(cv::InputOutputArray &diff, cv::InputArray &mean,
-//                    cv::InputArray &var, const double zscore,
-//                    cv::InputArray &mask, const double unsharp_alpha,
-//                    std::vector<std::vector<cv::Point>> &contours) {
-//
-//   cv::subtract(diff, mean, diff);
-//   cv::multiply(diff, -1.f, diff);
-//
-//   // median blur
-//   cv::medianBlur(diff, diff, 5);
-//
-//   // sharpen
-//   if (unsharp_alpha > 0.0)
-//     unsharp_mask(diff, diff, unsharp_alpha);
-//
-//   // mask differences below x std deviations
-//   cv::UMat std;
-//   cv::sqrt(var, std);
-//   cv::multiply(std, zscore, std);
-//
-//   cv::UMat thresh = cv::UMat(diff.rows(), diff.cols(), CV_8U);
-//   cv::compare(diff, std, thresh, cv::CMP_GT);
-//
-//   cv::bitwise_and(thresh, mask, thresh);
-//
-//   cv::findContours(thresh, contours, cv::RETR_EXTERNAL,
-//                    cv::CHAIN_APPROX_SIMPLE);
-//
-//   // filter_contours(contours, cpu_diff);
-//   // const cv::Mat cpu_diff = diff.getMat(cv::ACCESS_READ);
-//   // particles.reserve(contours.size());
-//   // std::transform(contours.begin(), contours.end(),
-//   //                std::back_inserter(particles),
-//   //                [&](const std::vector<cv::Point> &contour) {
-//   //                  return Particle(contour, cpu_diff, current_frame);
-//   //                });
-// }
-
-double contour_mean_radius(const std::vector<cv::Point> contour,
-                           const cv::Moments &moments) {
-  const cv::Point2f c(moments.m10 / moments.m00, moments.m01 / moments.m00);
-  double dist = std::accumulate(
-      contour.begin(), contour.end(), 0.0,
-      [&c](double sum, const cv::Point2f &p) { return sum + cv::norm(p - c); });
-  return dist / contour.size();
+  cv::compare(processed, std, threshold, cv::CMP_GT);
 }
 
 double image_sharpness(const cv::Mat &image) {
@@ -155,100 +118,12 @@ double image_sharpness(const cv::Mat &image) {
   return sigma[0];
 }
 
-double center_weighted_intensity(const std::vector<cv::Point> &contour,
-                                 cv::InputArray &image) {
-  cv::Rect rect = cv::boundingRect(contour);
-  cv::Mat mask = cv::Mat::zeros(rect.size(), CV_8U);
-  cv::drawContours(mask, {contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
-                   -rect.tl());
-  cv::Mat weights(rect.size(), CV_32F);
+double center_weighted_intensity(cv::InputArray &image, cv::InputArray &mask,
+                                 cv::OutputArray &weights) {
+  weights.create(image.size(), CV_32F);
   cv::distanceTransform(mask, weights, cv::DIST_L2, cv::DIST_MASK_3);
-  int kind = image.kind();
-
-  if (image.isMat()) {
-    cv::multiply(weights, image.getMat()(rect), weights,
-                 1.0 / cv::sum(weights)[0]);
-  } else if (image.isUMat()) {
-    cv::multiply(weights, image.getUMat()(rect), weights,
-                 1.0 / cv::sum(weights)[0]);
-  } else {
-    throw "only Mat and UMat are supported";
-  }
-
+  cv::multiply(weights, image, weights, 1.0 / cv::sum(weights)[0]);
   return cv::sum(weights)[0];
-}
-
-void filter_contours(std::vector<std::vector<cv::Point>> &contours,
-                     const cv::Mat &frame, struct filter_args args) {
-  contours.erase(
-      std::remove_if(
-          std::execution::par, contours.begin(), contours.end(),
-          [=](const std::vector<cv::Point> &c) {
-            cv::Moments moments = cv::moments(c);
-            if (args.area.first != args.area.second) {
-              if (moments.m00 < args.area.first or
-                  moments.m00 > args.area.second) {
-                return true;
-              }
-            }
-            if (args.aspect.first != args.aspect.second) {
-              auto rect = cv::minAreaRect(c);
-              double aspect = rect.size.aspectRatio();
-              if (aspect > 1.0)
-                aspect = 1.0 / aspect;
-              if (aspect < args.aspect.first or aspect > args.aspect.second) {
-                return true;
-              }
-            }
-            if (args.circularity.first != args.circularity.second) {
-              double perim = cv::arcLength(c, true);
-              double circularity =
-                  4.0 * std::numbers::pi * moments.m00 / std::pow(perim, 2);
-              if (circularity < args.circularity.first or
-                  circularity > args.circularity.second) {
-                return true;
-              }
-            }
-            if (args.convexity.first != args.convexity.second) {
-              std::vector<cv::Point> hull;
-              cv::convexHull(c, hull);
-              double convexity = moments.m00 / cv::contourArea(hull);
-              if (convexity < args.convexity.first or
-                  convexity > args.convexity.second) {
-                return true;
-              }
-            }
-            if (args.radius.first != args.radius.second) {
-              double radius = contour_mean_radius(c, moments);
-              if (radius < args.radius.first or radius > args.radius.second) {
-                return true;
-              }
-            }
-            if (args.intensity.first != args.intensity.second) {
-              cv::Rect rect = cv::boundingRect(c);
-              cv::Mat mask = cv::Mat::zeros(rect.size(), CV_8U);
-              cv::Mat image = cv::Mat::zeros(rect.size(), CV_8U);
-              cv::drawContours(mask, {c}, 0, 255, -1, cv::LINE_8, cv::noArray(),
-                               0, -rect.tl());
-
-              frame(rect).copyTo(image, mask);
-              double intensity = cv::sum(intensity)[0];
-              if (intensity < args.intensity.first or
-                  intensity > args.intensity.second) {
-                return true;
-              }
-            }
-            if (args.sharpness.first != args.sharpness.second) {
-              cv::Rect rect = cv::boundingRect(c);
-              double sharpness = image_sharpness(frame(rect));
-              if (sharpness < args.sharpness.first or
-                  sharpness > args.sharpness.second) {
-                return true;
-              }
-            }
-            return false;
-          }),
-      contours.end());
 }
 
 void filter_existing_particles(

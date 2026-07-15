@@ -1,75 +1,46 @@
 #include "particle.hpp"
+#include "contours.hpp"
 
-#include <numbers>
-#include <numeric>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <vector>
 
-Particle::Particle(const std::vector<cv::Point> &contour, const cv::Mat &image,
-                   int frame_number, const cv::Mat &raw_image)
-    : _id(id_counter++) {
-  // moments for center and area
-  _contours.push_back(contour);
+Particle::Particle(int frame_number, const std::vector<cv::Point> &contour,
+                   const cv::Mat &image, const cv::Mat &raw_image)
+    : _id(id_counter++), _index(0) {
+
+  cv::Rect rect = cv::boundingRect(contour);
+  rect &= cv::Rect(0, 0, image.cols, image.rows);
+
   _frames.push_back(frame_number);
-  _frame_index = 0;
+  _contours.push_back(contour);
+  _images.push_back(image(rect).clone());
+  if (!raw_image.empty()) {
+    _raw_images.push_back(raw_image(rect).clone());
+  }
 
-  _moments = cv::moments(contour);
-
-  _rect = cv::boundingRect(contour);
-
-  // _rect -= cv::Point(_rect.size()) * 0.5;
-  // _rect += _rect.size();
-  _rect &= cv::Rect(0, 0, image.cols, image.rows);
-
-  _image = image(_rect).clone();
-  // _mask = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
-  // cv::drawContours(_mask, {contour}, 0, 255, -1, cv::LINE_8, cv::noArray(),
-  // 0,
-  //                  -_rect.tl());
+  _metric = metric();
 };
 
-const std::vector<cv::Point> &Particle::contour() const {
-  return _contours[_frame_index];
+const double Particle::metric() const {
+  cv::Mat weights, mask;
+  mask_for_contour(contour(), mask);
+  cv::distanceTransform(mask, weights, cv::DIST_L2, cv::DIST_MASK_3, CV_32F);
+  cv::multiply(weights, image(), weights, 1.0 / cv::sum(weights)[0]);
+  return cv::sum(weights)[0];
 }
 
-int Particle::frameCount() const { return _frames.size(); }
-
-const int Particle::frameNumber() const { return _frames[_frame_index]; }
-
+const int Particle::frameCount() const { return _frames.size(); }
 const long Particle::id() const { return _id; }
 
-const cv::Mat &Particle::image() const { return _image; }
-
-const cv::Mat &Particle::rawImage() const { return _image_raw; }
-
-// Calculated
-double Particle::area() const { return _moments.m00; };
-
-double Particle::aspect() const {
-  double aspect = _min_area_rect.size.aspectRatio();
-  if (aspect > 1.0) {
-    aspect = 1.0 / aspect;
-  }
-  return aspect;
+const int Particle::frame() const { return _frames[_index]; }
+const std::vector<cv::Point> &Particle::contour() const {
+  return _contours[_index];
 }
-
-cv::Point2f Particle::center() const {
-  return cv::Point2f(_moments.m10 / _moments.m00, _moments.m01 / _moments.m00);
-}
-
-double Particle::circularity() const {
-  auto perim = cv::arcLength(_contour, true);
-  return 4.0 * std::numbers::pi * area() / std::pow(perim, 2);
-}
-
-double Particle::convexity() const {
-  std::vector<cv::Point> hull;
-  cv::convexHull(_contour, hull);
-  return area() / cv::contourArea(hull);
-};
+const cv::Mat &Particle::image() const { return _images[_index]; }
+const cv::Mat &Particle::rawImage() const { return _raw_images[_index]; }
 
 const std::vector<cv::Point> Particle::imageContour() const {
   std::vector<cv::Point> contour;
@@ -87,40 +58,11 @@ const double Particle::centerWeightedIntensity() const {
   return cv::sum(weights)[0];
 }
 
-const double Particle::circularEquvalentDiameter() const {
-  // moments.m00 = area()
-  return std::sqrt((4.0 * _moments.m00) / std::numbers::pi);
-}
-
 double Particle::intensity() const {
   cv::Mat intensity = cv::Mat::zeros(_image.rows, _image.cols, CV_8U);
   _image.copyTo(intensity, _mask);
   return cv::sum(intensity)[0];
 };
-
-const double Particle::maximumWidth() const {
-  // longest length of min area rect
-  return std::max(_min_area_rect.size.width, _min_area_rect.size.height);
-}
-
-const double Particle::minimumWidth() const {
-  // shortest length of min area rect
-  return std::min(_min_area_rect.size.width, _min_area_rect.size.height);
-}
-
-const double Particle::perimeter() const {
-  return cv::arcLength(contour(), true);
-}
-
-double Particle::radius() const {
-  const cv::Point2f pc = center();
-  const std::vector<cv::Point> &c = contour();
-  double dist = std::accumulate(c.begin(), c.end(), 0.0,
-                                [&pc](double sum, const cv::Point2f &p) {
-                                  return sum + cv::norm(p - pc);
-                                });
-  return dist / c.size();
-}
 
 double Particle::sharpness() const {
   cv::Mat laplace;
@@ -128,12 +70,6 @@ double Particle::sharpness() const {
   cv::Scalar mu, sigma;
   cv::meanStdDev(laplace, mu, sigma);
   return sigma[0];
-}
-
-void Particle::addFrames(const int count) { _frame_count += count; }
-
-void Particle::setRawImage(const cv::Mat &frame) {
-  _image_raw = frame(_rect).clone();
 }
 
 void Particle::update(const std::vector<cv::Point> &contour,
@@ -160,5 +96,24 @@ bool Particle::isClose(const Particle &b, const double edge_distance) {
   return cv::norm(center() - b.center()) - radius() - b.radius() <
          edge_distance;
 };
+
+double calculate_selection_metric(const std::vector<cv::Point> &contour,
+                                  cv::InputArray &image,
+                                  particle_metric method) {
+  switch (method) {
+  case CENTER_WEIGHTED_INTENSITY:
+    cv::Mat weights;
+    cv::distanceTransform(_mask, weights, cv::DIST_L2, cv::DIST_MASK_3);
+    cv::multiply(weights, _image, weights, 1.0 / cv::sum(weights)[0]);
+
+    return cv::sum(weights)[0];
+  case INTENSITY:
+    break;
+  case SHARPNESS:
+    break;
+  default:
+    throw "unknown selection metric";
+  }
+}
 
 long Particle::id_counter = 0;
