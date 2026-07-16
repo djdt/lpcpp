@@ -34,10 +34,10 @@ public:
   const long id() const;
 
   // current index access
-  const int frame() const;
-  const std::vector<cv::Point> &contour() const;
-  const cv::Mat &image() const;
-  const cv::Mat &rawImage() const;
+  const int frame(const int index = -1) const;
+  const std::vector<cv::Point> &contour(const int index = -1) const;
+  const cv::Mat &image(const int index = -1) const;
+  const cv::Mat &rawImage(const int index = -1) const;
 };
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,

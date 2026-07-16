@@ -29,12 +29,26 @@ const int Particle::frameCount() const { return _frames.size(); }
 const int Particle::lastFrame() const { return _frames.back(); }
 const long Particle::id() const { return _id; }
 
-const int Particle::frame() const { return _frames[_index]; }
-const std::vector<cv::Point> &Particle::contour() const {
-  return _contours[_index];
+const int Particle::frame(const int index) const {
+  if (index < 0)
+    index = _index;
+  return _frames[index];
 }
-const cv::Mat &Particle::image() const { return _images[_index]; }
-const cv::Mat &Particle::rawImage() const { return _raw_images[_index]; }
+const std::vector<cv::Point> &Particle::contour(const int index) const {
+  if (index < 0)
+    index = _index;
+  return _contours[index];
+}
+const cv::Mat &Particle::image(const int index) const {
+  if (index < 0)
+    index = _index;
+  return _images[index];
+}
+const cv::Mat &Particle::rawImage(const int index) const {
+  if (index < 0)
+    index = _index;
+  return _raw_images[index];
+}
 
 void Particle::update(const int frame_number,
                       const std::vector<cv::Point> &contour,
