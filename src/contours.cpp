@@ -162,6 +162,7 @@ void mask_for_contour(const std::vector<cv::Point> &contour,
                       cv::InputOutputArray &mask) {
   cv::Rect rect = cv::boundingRect(contour);
   mask.create(rect.size(), CV_8U);
+  mask.setTo(0);
   cv::drawContours(mask, {contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
                    -rect.tl());
 }
