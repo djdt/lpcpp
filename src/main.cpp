@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
   int background_frames = 1000;
   int particle_frames = 50;
-  double particle_distance = 3.0;
+  double particle_distance = 5.0;
   double zscore = 3.0;
   double unsharp_alpha = 1.0;
   std::array<float, 3> capillary = {0.f, 0.f, 0.f};
@@ -169,9 +169,9 @@ int main(int argc, char *argv[]) {
   write_particle_header(results_output);
 
   // load a frame and find the ROI
-  cv::UMat frame, mask;
+  cv::UMat frame, capillary_mask;
   cap.read(frame);
-  mask = cv::UMat::zeros(frame.rows, frame.cols, CV_8U);
+  capillary_mask = cv::UMat::zeros(frame.rows, frame.cols, CV_8U);
 
   std::cout << "Processsing " << path << std::endl;
 
@@ -192,8 +192,8 @@ int main(int argc, char *argv[]) {
     // shrink
     capillary[2] *= 0.95;
   }
-  cv::circle(mask, cv::Point(capillary[0], capillary[1]), capillary[2], 255,
-             -1);
+  cv::circle(capillary_mask, cv::Point(capillary[0], capillary[1]),
+             capillary[2], 255, -1);
 
   // setup arrays
   cv::UMat acc_mean;
@@ -239,6 +239,7 @@ int main(int argc, char *argv[]) {
     preprocess_and_threshold(frame, acc_mean, acc_var, processed, threshold,
                              zscore, unsharp_alpha);
 
+    cv::bitwise_and(threshold, capillary_mask, threshold);
     // get contours
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(threshold, contours, cv::RETR_EXTERNAL,
@@ -259,8 +260,12 @@ int main(int argc, char *argv[]) {
         [&](const std::vector<cv::Point> &contour) {
           bool existing = false;
           for (auto &particle : particles) {
-            // TODO: rewrite with early exit
-            double dist = contour_distance(contour, particle.contour());
+            // check circles first
+            double dist = contour_box_distance(contour, particle.contour());
+            if (dist > particle_distance)
+              continue;
+            // finer check for close particles
+            dist = contour_distance(contour, particle.contour());
             if (dist < particle_distance) {
               particle.update(frame_pos, contour, cpu_proc, cpu_frame);
               existing = true;
@@ -275,18 +280,19 @@ int main(int argc, char *argv[]) {
         });
 
     // remove untrakced (old) particles from the vector
-    std::vector<Particle> output_particles;
-    std::remove_copy_if(particles.begin(), particles.end(),
-                        std::back_inserter(output_particles),
-                        [&](const Particle &p) {
-                          return frame_pos - p.lastFrame() > particle_frames;
-                        });
+    auto pivot = std::stable_partition(
+        particles.begin(), particles.end(), [&](const Particle &p) {
+          return frame_pos - p.lastFrame() < particle_frames;
+        });
+    std::vector<Particle> output_particles(
+        std::make_move_iterator(pivot),
+        std::make_move_iterator(particles.end()));
+    particles.erase(pivot, particles.end());
 
     // create a color image and draw the contuors
     if (draw) {
       cv::UMat rgb_frame;
-      draw_particles_on_frame(frame, rgb_frame, particles.rbegin(),
-                              particles.rend(), particle_frames);
+      draw_particles_on_frame(frame, rgb_frame, particles);
       // draw capilary bounds
       cv::circle(rgb_frame, cv::Point(capillary[0], capillary[1]), capillary[2],
                  cv::Scalar(0, 255, 0), 1);
@@ -318,6 +324,7 @@ int main(int argc, char *argv[]) {
                 << frame_count << " @ ";
       std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
       std::cout << particle_count << " particles, ";
+      std::cout << particles.size() << " active, ";
       std::cout << std::format("{:%T}", remaining) << " remaining.\r"
                 << std::flush;
     }
