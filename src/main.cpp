@@ -1,8 +1,10 @@
 #include <algorithm>
-#include <deque>
+#include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <opencv2/core.hpp>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/matx.hpp>
@@ -217,9 +219,7 @@ int main(int argc, char *argv[]) {
   cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
   start_time = std::chrono::system_clock::now();
 
-  // init the particle vars
-  // std::deque<std::vector<Particle>> particles;
-  // int particle_count = 0;
+  int particle_count = 0;
   std::vector<Particle> particles;
 
   cv::UMat processed, threshold;
@@ -263,6 +263,7 @@ int main(int argc, char *argv[]) {
         [&](const std::vector<cv::Point> &contour) {
           bool existing = false;
           for (auto &particle : particles) {
+            // TODO: rewrite with early exit
             double dist = contour_distance(contour, particle.contour());
             if (dist < particle_distance) {
               particle.update(frame_pos, contour, cpu_proc, cpu_frame);
@@ -273,29 +274,17 @@ int main(int argc, char *argv[]) {
           if (!existing) {
             particles.push_back(
                 Particle(frame_pos, contour, cpu_proc, cpu_frame));
+            particle_count += 1;
           }
         });
 
-    // filter particle based on parameters
-    // filter_particles(new_particles, contour_filter_args);
-    // filter based on last n frames
-
-    // for (auto it = particles.begin(); it != particles.end(); ++it) {
-    //   filter_existing_particles(
-    //       *it, new_particles,
-    //       [](const Particle &a, const Particle &b) {
-    //         return a.centerWeightedIntensity() > b.centerWeightedIntensity();
-    //       },
-    //       particle_distance);
-    // }
-    //
-    // // add a raw image to each particle, slow so only if images needed
-    // if (export_images) {
-    //   cv::Mat cpu_frame = frame.getMat(cv::ACCESS_READ);
-    //   std::for_each(new_particles.begin(), new_particles.end(),
-    //                 [&cpu_frame](Particle &p) { p.setRawImage(cpu_frame); });
-    // }
-    // particles.push_back(new_particles);
+    // remove untrakced (old) particles from the vector
+    std::vector<Particle> output_particles;
+    std::remove_copy_if(particles.begin(), particles.end(),
+                        std::back_inserter(output_particles),
+                        [&](const Particle &p) {
+                          return frame_pos - p.lastFrame() > particle_frames;
+                        });
 
     // create a color image and draw the contuors
     if (draw) {
@@ -314,17 +303,13 @@ int main(int argc, char *argv[]) {
     }
 
     // output the particles
-    if (particles.size() > particle_frames) {
-      auto output_particles = particles.front();
-
-      write_particle_data(output_particles, results_output);
-      if (export_images) {
-        if (write_particle_images(output_particles, image_dir)) {
+    write_particle_data(output_particles, results_output);
+    if (export_images) {
+      for (const auto &p : output_particles) {
+        auto image_path = image_dir / std::to_string(p.id()).append(".png");
+        if (save_particle_image(p, image_path))
           return 1;
-        }
       }
-      particle_count += particles[0].size();
-      particles.pop_front();
     }
 
     // update progress
@@ -343,14 +328,13 @@ int main(int argc, char *argv[]) {
 
     frame_pos++;
   } // while
-
   // export any remaining particles
-  for (auto it = particles.begin(); it != particles.end(); ++it) {
-    write_particle_data(*it, results_output);
-    if (export_images) {
-      if (write_particle_images(*it, image_dir)) {
+  write_particle_data(particles, results_output);
+  if (export_images) {
+    for (const auto &p : particles) {
+      auto image_path = image_dir / std::to_string(p.id()).append(".png");
+      if (save_particle_image(p, image_path))
         return 1;
-      }
     }
   }
 
