@@ -4,8 +4,9 @@
 #include <algorithm>
 #include <cmath>
 #include <execution>
-#include <opencv2/core/mat.hpp>
-#include <opencv2/core/types.hpp>
+#include <iterator>
+#include <limits>
+#include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 
 double contour_aspect(const std::vector<cv::Point> &contour) {
@@ -42,19 +43,28 @@ double contour_convexity(const std::vector<cv::Point> &contour,
 
 double contour_distance(const std::vector<cv::Point> &contour,
                         const cv::Point2f &pos) {
+  // double min_dist = std::numeric_limits<double>::infinity();
+  // for (const cv::Point2f &c : contour) {
+  //   double dist = cv::norm(c - pos);
+  //   if (dist < min_dist) {
+  //     min_dist = dist;
+  //   }
+  // }
+  // return min_dist * -cv::pointPolygonTest(contour, pos, false);
   double dist = cv::pointPolygonTest(contour, pos, true);
   return -dist;
 }
 
-double contour_distance(const std::vector<cv::Point> &contour,
-                        const std::vector<cv::Point> &contour2) {
+double contour_distance(const std::vector<cv::Point> &contour_a,
+                        const std::vector<cv::Point> &contour_b) {
   // possible to approximate with getClosestEllipsePoints
   std::vector<double> dists;
-  std::transform(std::execution::par, contour.begin(), contour.end(),
-                 dists.begin(), [&contour2](const cv::Point &p) {
-                   return cv::pointPolygonTest(contour2, p, true);
+  dists.reserve(contour_a.size());
+  std::transform(contour_a.begin(), contour_a.end(), std::back_inserter(dists),
+                 [&contour_b](const cv::Point &p) {
+                   return contour_distance(contour_b, p);
                  });
-  return -(*std::max_element(dists.begin(), dists.end()));
+  return *std::min_element(dists.begin(), dists.end());
 }
 
 double contour_maximum_feret(const std::vector<cv::Point> &contour) {
