@@ -10,7 +10,7 @@ double image_center_weighted_intensity(cv::InputArray &image,
                                        cv::InputArray &mask,
                                        cv::OutputArray &weights);
 double image_intensity(cv::InputArray &image, cv::InputArray &mask);
-double image_sharpness(cv::InputArray &image, cv::InputOutputArray &laplace);
+double image_sharpness(cv::InputArray &image, cv::OutputArray &laplace);
 
 void unsharp_mask(cv::InputArray &image, cv::OutputArray &output, double alpha);
 
