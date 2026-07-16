@@ -1,6 +1,5 @@
 #pragma once
 
-#include <execution>
 #include <filesystem>
 #include <fstream>
 #include <opencv2/imgproc.hpp>
