@@ -8,9 +8,9 @@ enum ParticleMetric { CENTER_WEIGHTED_INTENSITY = 0, INTENSITY = 1, SHARPNESS };
 class Particle {
 private:
   static long id_counter;
-  const long _id;
+  long _id;
 
-  const ParticleMetric _metric_method;
+  ParticleMetric _metric_method;
   double _metric;
 
   std::vector<cv::Mat> _images;
