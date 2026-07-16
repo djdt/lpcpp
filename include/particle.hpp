@@ -1,8 +1,6 @@
 #pragma once
 
 #include <opencv2/core.hpp>
-#include <opencv2/core/mat.hpp>
-#include <opencv2/core/types.hpp>
 #include <vector>
 
 enum ParticleMetric { CENTER_WEIGHTED_INTENSITY = 0, INTENSITY = 1, SHARPNESS };

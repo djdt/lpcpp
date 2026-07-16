@@ -5,7 +5,6 @@
 #include <cmath>
 #include <execution>
 #include <iterator>
-#include <limits>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 

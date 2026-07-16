@@ -1,7 +1,5 @@
 #include <array>
 #include <opencv2/core.hpp>
-#include <opencv2/core/mat.hpp>
-#include <opencv2/core/types.hpp>
 #include <opencv2/videoio.hpp>
 
 std::array<float, 3> find_capillary(cv::InputArray &input);
