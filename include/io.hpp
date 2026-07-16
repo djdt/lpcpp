@@ -17,10 +17,11 @@ void write_particle_data(const std::vector<Particle> &particles,
 bool save_particle_image(const Particle &particle,
                          const std::filesystem::path &path);
 
-template <typename Iter>
 void draw_particles_on_frame(cv::InputArray &input,
-                             cv::InputOutputArray &output, Iter rbegin,
-                             Iter rend, const int particle_frames) {
+                             cv::InputOutputArray &output,
+                             std::vector<Particle> &particles,
+                             const int particle_frames);
+{
 
   output.createSameSize(input, CV_8UC3);
   cv::cvtColor(input, output, cv::COLOR_GRAY2BGR);

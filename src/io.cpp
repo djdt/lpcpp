@@ -1,9 +1,11 @@
+#include <algorithm>
+#include <execution>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 
+#include <iterator>
 #include <opencv2/core.hpp>
-#include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <vector>
@@ -60,6 +62,27 @@ bool save_particle_image(const Particle &particle,
     return true;
   }
   return false;
+}
+
+void draw_particles_on_frame(cv::InputArray &input,
+                             cv::InputOutputArray &output,
+                             std::vector<Particle> &particles,
+                             const int particle_frames) {
+
+  output.createSameSize(input, CV_8UC3);
+  cv::cvtColor(input, output, cv::COLOR_GRAY2BGR);
+
+  auto color = cv::Scalar(0, 0, 255);
+  int decay = 255 / particle_frames;
+  std::vector<std::vector<cv::Point>> contours;
+  contours.reserve(particles.size());
+
+  std::transform(particles.begin(), particles.end(),
+                 std::back_inserter(contours),
+                 [](const Particle &p) { return p.contour(); });
+
+  cv::drawContours(output, contours, -1, color, 1.0, 8);
+  color[2] -= decay;
 }
 
 // bool write_particle_images(const std::vector<Particle> &particles,
