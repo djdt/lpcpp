@@ -1,3 +1,4 @@
+#include "io.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -12,6 +13,24 @@
 #include "contours.hpp"
 #include "cpuproc.hpp"
 #include "particle.hpp"
+
+void draw_particles_on_frame(cv::InputArray &input,
+                             cv::InputOutputArray &output,
+                             std::vector<Particle> &particles) {
+
+  output.createSameSize(input, CV_8UC3);
+  cv::cvtColor(input, output, cv::COLOR_GRAY2BGR);
+
+  auto color = cv::Scalar(0, 0, 255);
+  std::vector<std::vector<cv::Point>> contours;
+  contours.reserve(particles.size());
+
+  std::transform(particles.begin(), particles.end(),
+                 std::back_inserter(contours),
+                 [](const Particle &p) { return p.contour(); });
+
+  cv::drawContours(output, contours, -1, color, 1.0, 8);
+}
 
 void write_particle_header(std::ofstream &ofs) {
   ofs << "id,frame,frame_count,area,aspect,circular_equivalent_diameter,"
@@ -63,47 +82,30 @@ bool save_particle_image(const Particle &particle,
   return false;
 }
 
-void draw_particles_on_frame(cv::InputArray &input,
-                             cv::InputOutputArray &output,
-                             std::vector<Particle> &particles) {
+bool save_particle_point_data_vtk(const Particle &particle,
+                                  const std::filesystem::path &path) {
+  // find extents
+  cv::Rect extents;
+  std::vector<cv::Rect> rects;
+  for (const auto &c : particle.contour()) {
+    cv::Rect rect = cv::boundingRect(c);
+    extents = extents | rect;
+    rects.push_back(rect);
+  }
+  std::ofstream ofs(path);
+  ofs << "<VTKFile type=\"ImageData\" version=\"0.1\" "
+         "byte_order=\"LittleEndian\">\n";
+  ofs << "\t<ImageData WholeExtent=\"" << extents.x << " "
+      << extents.x + extents.width << " " << extents.y << " "
+      << extents.y + extents.height << " " << 0 << " " << particle.frameCount()
+      << "\" Origin=\"0 0 0\" Spacing=\"1 1 1\">\n";
 
-  output.createSameSize(input, CV_8UC3);
-  cv::cvtColor(input, output, cv::COLOR_GRAY2BGR);
-
-  auto color = cv::Scalar(0, 0, 255);
-  std::vector<std::vector<cv::Point>> contours;
-  contours.reserve(particles.size());
-
-  std::transform(particles.begin(), particles.end(),
-                 std::back_inserter(contours),
-                 [](const Particle &p) { return p.contour(); });
-
-  cv::drawContours(output, contours, -1, color, 1.0, 8);
+  for (size_t i = 0; i < particle.frameCount(); ++i) {
+    cv::Mat layer = cv::Mat::zeros(extents.size(), CV_8U);
+    layer(rects[i] - extents.tl()) = images[i];
+    ofs << "\t\t<Piece Extent=\"" << rects[i].x << " "
+        << rects[i].x + rects[i].width << " " << rects[i].y << " "
+        << rects[i].y + rects[i].height << " " << i << " " << i + 1 << "\">\n";
+    ofs << "\t\t\t<PointData>"
+  }
 }
-
-// bool write_particle_images(const std::vector<Particle> &particles,
-//                            const std::filesystem::path &output_dir) {
-//   auto color = cv::Scalar(0, 0, 255);
-//   for (auto it = particles.begin(); it != particles.end(); ++it) {
-//     auto out = output_dir / std::to_string(it->id()).append(".png");
-//     cv::Mat image, raw_image;
-//     it->image().convertTo(image, CV_8U);
-//     it->rawImage().convertTo(raw_image, CV_8U);
-//
-//     cv::Mat bgr = cv::Mat::zeros(image.rows, image.cols, CV_8UC3);
-//     cv::insertChannel(image, bgr, 1);
-//     cv::insertChannel(raw_image, bgr, 0);
-//
-//     cv::Mat fill = cv::Mat::zeros(image.rows, image.cols, CV_8U);
-//     cv::Mat mask;
-//     mask_for_contour(it->contour(), mask);
-//     // cv::polylines(rgb, it->imageContour(), -1, color, 1.0, 8);
-//     cv::fillPoly(fill, it->imageContour(), 255);
-//     cv::insertChannel(fill, bgr, 2);
-//     if (not cv::imwrite(out.string(), bgr)) {
-//       std::cerr << "failed to save " << out << std::endl;
-//       return true;
-//     }
-//   }
-//   return false;
-// }

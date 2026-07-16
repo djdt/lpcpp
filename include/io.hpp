@@ -7,6 +7,10 @@
 
 #include "particle.hpp"
 
+void draw_particles_on_frame(cv::InputArray &input,
+                             cv::InputOutputArray &output,
+                             std::vector<Particle> &particles);
+
 void write_particle_header(std::ofstream &ofs);
 void write_particle_data(const std::vector<Particle> &particles,
                          std::ofstream &ofs);
@@ -16,6 +20,5 @@ void write_particle_data(const std::vector<Particle> &particles,
 bool save_particle_image(const Particle &particle,
                          const std::filesystem::path &path);
 
-void draw_particles_on_frame(cv::InputArray &input,
-                             cv::InputOutputArray &output,
-                             std::vector<Particle> &particles);
+bool save_particle_point_data_vtk(const Particle &particle,
+                                  const std::filesystem::path &path);
