@@ -16,7 +16,7 @@
 void write_particle_header(std::ofstream &ofs) {
   ofs << "id,frame,frame_count,area,aspect,circular_equivalent_diameter,"
          "circularity,convexity,intensity,maximum_width,minimum_width,"
-         "perimeter,radius,sharpness,x,y"
+         "perimeter,sharpness,x,y"
       << std::endl;
 }
 
@@ -53,7 +53,7 @@ bool save_particle_image(const Particle &particle,
   particle.image().convertTo(image, CV_8U);
   particle.rawImage().convertTo(raw_image, CV_8U);
   mask_for_contour(particle.contour(), mask);
-  const cv::Mat src[] = {image, raw_image, mask};
+  const cv::Mat src[] = {raw_image, image, mask};
   cv::Mat dst;
   cv::merge(src, 3, dst);
   if (not cv::imwrite(path.string(), dst)) {
