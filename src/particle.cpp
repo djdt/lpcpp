@@ -27,6 +27,7 @@ Particle::Particle(const int frame_number,
 };
 
 const int Particle::frameCount() const { return _frames.size(); }
+const int Particle::lastFrame() const { return _frames.back(); }
 const long Particle::id() const { return _id; }
 
 const int Particle::frame() const { return _frames[_index]; }

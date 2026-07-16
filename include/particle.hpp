@@ -32,6 +32,7 @@ public:
               const cv::Mat &image, const cv::Mat &raw_image);
 
   const int frameCount() const;
+  const int lastFrame() const;
   const long id() const;
 
   // current index access
