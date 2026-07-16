@@ -18,5 +18,4 @@ bool save_particle_image(const Particle &particle,
 
 void draw_particles_on_frame(cv::InputArray &input,
                              cv::InputOutputArray &output,
-                             std::vector<Particle> &particles,
-                             const int particle_frames);
+                             std::vector<Particle> &particles);
