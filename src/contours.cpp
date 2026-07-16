@@ -90,72 +90,70 @@ double contour_minimum_feret(const std::vector<cv::Point> &contour) {
 }
 
 void filter_contours(std::vector<std::vector<cv::Point>> &contours,
-                     const cv::Mat &frame, struct filter_args args) {
-  contours.erase(
-      std::remove_if(
-          std::execution::par, contours.begin(), contours.end(),
-          [=](const std::vector<cv::Point> &c) {
-            cv::Moments moments = cv::moments(c);
-            if (args.area.first != args.area.second) {
-              if (moments.m00 < args.area.first or
-                  moments.m00 > args.area.second) {
-                return true;
-              }
-            }
-            if (args.aspect.first != args.aspect.second) {
-              double aspect = contour_aspect(c);
-              if (aspect < args.aspect.first or aspect > args.aspect.second) {
-                return true;
-              }
-            }
-            if (args.circularity.first != args.circularity.second) {
-              double circularity = contour_circularity(c, moments.m00);
-              if (circularity < args.circularity.first or
-                  circularity > args.circularity.second) {
-                return true;
-              }
-            }
-            if (args.convexity.first != args.convexity.second) {
-              double convexity = contour_convexity(c, moments.m00);
-              if (convexity < args.convexity.first or
-                  convexity > args.convexity.second) {
-                return true;
-              }
-            }
-            if (args.radius.first != args.radius.second) {
-              double radius =
-                  contour_distance(c, cv::Point2f(moments.m00 / moments.m10,
-                                                  moments.m00 / moments.m01));
-              if (radius < args.radius.first or radius > args.radius.second) {
-                return true;
-              }
-            }
-            // image based operations
-            if ((args.intensity.first != args.intensity.second) ||
-                (args.sharpness.first != args.sharpness.second)) {
-              cv::Mat mask;
-              cv::Rect rect = cv::boundingRect(c);
-              mask_for_contour(c, mask);
+                     const cv::Mat &frame, filter_args args) {
+  auto it = std::remove_if(
+      std::execution::par, contours.begin(), contours.end(),
+      [=](const std::vector<cv::Point> &c) {
+        cv::Moments moments = cv::moments(c);
+        if (args.area.first != args.area.second) {
+          if (moments.m00 < args.area.first || moments.m00 > args.area.second) {
+            return true;
+          }
+        }
+        if (args.aspect.first != args.aspect.second) {
+          double aspect = contour_aspect(c);
+          if (aspect < args.aspect.first || aspect > args.aspect.second) {
+            return true;
+          }
+        }
+        if (args.circularity.first != args.circularity.second) {
+          double circularity = contour_circularity(c, moments.m00);
+          if (circularity < args.circularity.first ||
+              circularity > args.circularity.second) {
+            return true;
+          }
+        }
+        if (args.convexity.first != args.convexity.second) {
+          double convexity = contour_convexity(c, moments.m00);
+          if (convexity < args.convexity.first ||
+              convexity > args.convexity.second) {
+            return true;
+          }
+        }
+        if (args.radius.first != args.radius.second) {
+          double radius =
+              contour_distance(c, cv::Point2f(moments.m00 / moments.m10,
+                                              moments.m00 / moments.m01));
+          if (radius < args.radius.first || radius > args.radius.second) {
+            return true;
+          }
+        }
+        // image based operations
+        if ((args.intensity.first != args.intensity.second) ||
+            (args.sharpness.first != args.sharpness.second)) {
+          cv::Mat mask;
+          cv::Rect rect = cv::boundingRect(c);
+          mask_for_contour(c, mask);
 
-              if (args.intensity.first != args.intensity.second) {
-                double intensity = image_intensity(frame(rect), mask);
-                if (intensity < args.intensity.first or
-                    intensity > args.intensity.second) {
-                  return true;
-                }
-              }
-              if (args.sharpness.first != args.sharpness.second) {
-                cv::Mat laplace;
-                double sharpness = image_sharpness(frame(rect), laplace);
-                if (sharpness < args.sharpness.first or
-                    sharpness > args.sharpness.second) {
-                  return true;
-                }
-              }
+          if (args.intensity.first != args.intensity.second) {
+            double intensity = image_intensity(frame(rect), mask);
+            if (intensity < args.intensity.first ||
+                intensity > args.intensity.second) {
+              return true;
             }
-            return false;
-          }),
-      contours.end());
+          }
+          if (args.sharpness.first != args.sharpness.second) {
+            cv::Mat laplace;
+            double sharpness = image_sharpness(frame(rect), laplace);
+            if (sharpness < args.sharpness.first ||
+                sharpness > args.sharpness.second) {
+              return true;
+            }
+          }
+        }
+        return false;
+      });
+  contours.erase(it, contours.end());
 }
 
 void mask_for_contour(const std::vector<cv::Point> &contour,

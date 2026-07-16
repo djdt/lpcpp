@@ -44,7 +44,7 @@ double contour_maximum_feret(const std::vector<cv::Point> &contour);
 double contour_minimum_feret(const std::vector<cv::Point> &contour);
 
 void filter_contours(std::vector<std::vector<cv::Point>> &contours,
-                     const cv::Mat &frame, struct filter_args args);
+                     const cv::Mat &frame, filter_args args);
 
 void mask_for_contour(const std::vector<cv::Point> &contour,
                       cv::InputOutputArray &mask);
