@@ -7,6 +7,7 @@
 #include <iterator>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include <vector>
 
 double contour_aspect(const std::vector<cv::Point> &contour) {
   cv::RotatedRect rect = cv::minAreaRect(contour);
@@ -40,18 +41,30 @@ double contour_convexity(const std::vector<cv::Point> &contour,
   return area / cv::contourArea(hull);
 }
 
+double contour_box_distance(const std::vector<cv::Point> &contour_a,
+                            const std::vector<cv::Point> &contour_b) {
+  cv::Rect rect_a = cv::boundingRect(contour_a);
+  cv::Rect rect_b = cv::boundingRect(contour_b);
+  cv::Point2f center_a = cv::Point2f(rect_a.x + rect_a.width / 2.f,
+                                     rect_a.y + rect_a.height / 2.f);
+  cv::Point2f center_b = cv::Point2f(rect_b.x + rect_b.width / 2.f,
+                                     rect_b.y + rect_b.height / 2.f);
+  return cv::norm(center_a - center_b) - (cv::norm(rect_a.tl() - rect_a.br()) +
+                                          cv::norm(rect_b.tl() - rect_b.br())) /
+                                             2.0;
+}
+
+double contour_circle_distance(const std::vector<cv::Point> &contour_a,
+                               const std::vector<cv::Point> &contour_b) {
+  cv::Point2f center_a, center_b;
+  float radius_a, radius_b;
+  cv::minEnclosingCircle(contour_a, center_a, radius_a);
+  cv::minEnclosingCircle(contour_b, center_b, radius_b);
+  return cv::norm(center_a - center_b) - (radius_a + radius_b);
+}
 double contour_distance(const std::vector<cv::Point> &contour,
                         const cv::Point2f &pos) {
-  // double min_dist = std::numeric_limits<double>::infinity();
-  // for (const cv::Point2f &c : contour) {
-  //   double dist = cv::norm(c - pos);
-  //   if (dist < min_dist) {
-  //     min_dist = dist;
-  //   }
-  // }
-  // return min_dist * -cv::pointPolygonTest(contour, pos, false);
-  double dist = cv::pointPolygonTest(contour, pos, true);
-  return -dist;
+  return -cv::pointPolygonTest(contour, pos, true);
 }
 
 double contour_distance(const std::vector<cv::Point> &contour_a,

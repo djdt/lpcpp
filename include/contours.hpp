@@ -27,6 +27,10 @@ double contour_circularity(const std::vector<cv::Point> &contour,
                            const double area = -1.0);
 double contour_convexity(const std::vector<cv::Point> &contour,
                          const double area = -1.0);
+double contour_box_distance(const std::vector<cv::Point> &contour_a,
+                            const std::vector<cv::Point> &contour_b);
+double contour_circle_distance(const std::vector<cv::Point> &contour_a,
+                               const std::vector<cv::Point> &contour_b);
 double contour_distance(const std::vector<cv::Point> &contour,
                         const cv::Point2f &pos);
 double contour_distance(const std::vector<cv::Point> &contour,
