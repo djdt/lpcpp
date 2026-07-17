@@ -84,28 +84,46 @@ bool save_particle_image(const Particle &particle,
 
 bool save_particle_point_data_vtk(const Particle &particle,
                                   const std::filesystem::path &path) {
-  // find extents
-  cv::Rect extents;
-  std::vector<cv::Rect> rects;
-  for (const auto &c : particle.contour()) {
-    cv::Rect rect = cv::boundingRect(c);
-    extents = extents | rect;
-    rects.push_back(rect);
-  }
+  // TODO: use a rectilinear grid for offset frames
+  cv::Rect bounds = particle.boundingRect();
   std::ofstream ofs(path);
   ofs << "<VTKFile type=\"ImageData\" version=\"0.1\" "
          "byte_order=\"LittleEndian\">\n";
-  ofs << "\t<ImageData WholeExtent=\"" << extents.x << " "
-      << extents.x + extents.width << " " << extents.y << " "
-      << extents.y + extents.height << " " << 0 << " " << particle.frameCount()
-      << "\" Origin=\"0 0 0\" Spacing=\"1 1 1\">\n";
+  ofs << "\t<ImageData WholeExtent=\"0 " << bounds.width - 1 << " 0 "
+      << bounds.height - 1 << " 0 " << particle.frameCount() - 1
+      << "\" Origin=\"" << bounds.x << " " << bounds.y
+      << " 0\" Spacing=\"1 1 1\">\n";
+  ofs << "\t\t<Piece Extent=\"0 " << bounds.width - 1 << " 0 "
+      << bounds.height - 1 << " 0 " << particle.frameCount() - 1 << "\">\n";
+  ofs << "\t\t\t<PointData Scalars=\"processed\">\n";
+  ofs << "\t\t\t\t<DataArray type=\"Float32\" Name=\"processed\" "
+         "format=\"ascii\">\n";
 
-  for (size_t i = 0; i < particle.frameCount(); ++i) {
-    cv::Mat layer = cv::Mat::zeros(extents.size(), CV_8U);
-    layer(rects[i] - extents.tl()) = images[i];
-    ofs << "\t\t<Piece Extent=\"" << rects[i].x << " "
-        << rects[i].x + rects[i].width << " " << rects[i].y << " "
-        << rects[i].y + rects[i].height << " " << i << " " << i + 1 << "\">\n";
-    ofs << "\t\t\t<PointData>"
+  for (size_t z = 0; z < particle.frameCount(); ++z) {
+    const cv::Mat &image = particle.image(z);
+    cv::Rect rect = cv::boundingRect(particle.contour(z));
+    cv::Point offset = rect.tl() - bounds.tl();
+
+    for (size_t y = 0; y < bounds.height; ++y) {
+      for (size_t x = 0; x < bounds.width; ++x) {
+        size_t sx = x - offset.x;
+        size_t sy = y - offset.y;
+        if (sx >= 0 && sx < image.cols && sy >= 0 && sy < image.rows) {
+          ofs << image.at<float>(sy, sx);
+        } else {
+          ofs << "0";
+        }
+        if (x < bounds.width - 1)
+          ofs << " ";
+      }
+      ofs << "\n";
+    }
   }
+
+  ofs << "\t\t\t\t</DataArray>\n";
+  ofs << "\t\t\t</PointData>\n";
+  ofs << "\t\t</Piece>\n";
+  ofs << "\t</ImageData>\n";
+  ofs << "</VTKFile>\n";
+  return false;
 }
