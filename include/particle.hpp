@@ -1,6 +1,7 @@
 #pragma once
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/mat.hpp>
 #include <vector>
 
 enum ParticleMetric { CENTER_WEIGHTED_INTENSITY = 0, INTENSITY = 1, SHARPNESS };
@@ -26,18 +27,20 @@ public:
            const cv::Mat &image, const cv::Mat &raw_image,
            ParticleMetric metric = CENTER_WEIGHTED_INTENSITY);
 
-  void update(const int frame_number, const std::vector<cv::Point> &contour,
-              const cv::Mat &image, const cv::Mat &raw_image);
-
   const int frameCount() const;
-  const int lastFrame() const;
   const long id() const;
+
+  const int lastFrame() const;
 
   // current index access
   const int frame(const int index = -1) const;
   const std::vector<cv::Point> &contour(const int index = -1) const;
   const cv::Mat &image(const int index = -1) const;
   const cv::Mat &rawImage(const int index = -1) const;
+
+  const cv::Rect boundingRect() const;
+  void update(const int frame_number, const std::vector<cv::Point> &contour,
+              const cv::Mat &image, const cv::Mat &raw_image);
 };
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,
