@@ -84,18 +84,16 @@ bool save_particle_image(const Particle &particle,
 
 bool save_particle_point_data_vtk(const Particle &particle,
                                   const std::filesystem::path &path) {
-  // TODO: use a rectilinear grid for offset frames
   cv::Rect bounds = particle.boundingRect();
   std::ofstream ofs(path);
-  ofs << "<VTKFile type=\"ImageData\" version=\"0.1\" "
+
+  ofs << "<VTKFile type=\"RectilinearGrid\" version=\"0.1\" "
          "byte_order=\"LittleEndian\">\n";
-  ofs << "\t<ImageData WholeExtent=\"0 " << bounds.width - 1 << " 0 "
-      << bounds.height - 1 << " 0 " << particle.frameCount() - 1
-      << "\" Origin=\"" << bounds.x << " " << bounds.y
-      << " 0\" Spacing=\"1 1 1\">\n";
-  ofs << "\t\t<Piece Extent=\"0 " << bounds.width - 1 << " 0 "
-      << bounds.height - 1 << " 0 " << particle.frameCount() - 1 << "\">\n";
-  ofs << "\t\t\t<PointData Scalars=\"processed\">\n";
+  ofs << "\t<RectilinearGrid WholeExtent=\"0 " << bounds.width << " 0 "
+      << bounds.height << " 0 " << particle.frameCount() << "\">\n";
+  ofs << "\t\t<Piece Extent=\"0 " << bounds.width << " 0 " << bounds.height
+      << " 0 " << particle.frameCount() << "\">\n";
+  ofs << "\t\t\t<CellData Scalars=\"processed\">\n";
   ofs << "\t\t\t\t<DataArray type=\"Float32\" Name=\"processed\" "
          "format=\"ascii\">\n";
 
@@ -109,12 +107,10 @@ bool save_particle_point_data_vtk(const Particle &particle,
         size_t sx = x - offset.x;
         size_t sy = y - offset.y;
         if (sx >= 0 && sx < image.cols && sy >= 0 && sy < image.rows) {
-          ofs << image.at<float>(sy, sx);
+          ofs << image.at<float>(sy, sx) << " ";
         } else {
-          ofs << "0";
+          ofs << "0 ";
         }
-        if (x < bounds.width - 1)
-          ofs << " ";
       }
       ofs << "\n";
     }
@@ -122,8 +118,32 @@ bool save_particle_point_data_vtk(const Particle &particle,
 
   ofs << "\t\t\t\t</DataArray>\n";
   ofs << "\t\t\t</PointData>\n";
+
+  ofs << "\t\t\t<Coordinates>\n";
+  ofs << "\t\t\t\t<DataArray type=\"Float32\" Name=\"X\" "
+         "NumberOfComponents=\"1\" format=\"ascii\">\n";
+  ofs << "\t\t\t\t</DataArray>\n";
+  for (size_t x = bounds.x; x < bounds.x + bounds.width; ++x) {
+    ofs << x << " ";
+  }
+  ofs << "\n";
+  ofs << "\t\t\t\t<DataArray type=\"Float32\" Name=\"Y\" "
+         "NumberOfComponents=\"1\" format=\"ascii\">\n";
+  ofs << "\t\t\t\t</DataArray>\n";
+  for (size_t y = bounds.y; y < bounds.y + bounds.height; ++y) {
+    ofs << y << " ";
+  }
+  ofs << "\n";
+  ofs << "\t\t\t\t<DataArray type=\"Float32\" Name=\"Z\" "
+         "NumberOfComponents=\"1\" format=\"ascii\">\n";
+  for (size_t z = 0; z < particle.frameCount(); ++z) {
+    ofs << particle.frame(z) << " ";
+  }
+  ofs << "\n";
+  ofs << "\t\t\t\t</DataArray>\n";
+  ofs << "\t\t\t</Coordinates>\n";
   ofs << "\t\t</Piece>\n";
-  ofs << "\t</ImageData>\n";
+  ofs << "\t</RectilinearGrid>\n";
   ofs << "</VTKFile>\n";
   return false;
 }
