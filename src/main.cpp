@@ -309,7 +309,7 @@ int main(int argc, char *argv[]) {
     if (export_images) {
       for (const auto &p : output_particles) {
         auto image_path = image_dir / std::to_string(p.id()).append(".png");
-        auto vtk_path = image_dir / std::to_string(p.id()).append(".vtr");
+        auto vtk_path = image_dir / std::to_string(p.id()).append(".vti");
         if (save_particle_image(p, image_path))
           return 1;
         if (save_particle_point_data_vtk(p, vtk_path))
