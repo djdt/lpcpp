@@ -42,6 +42,7 @@ int main(int argc, char *argv[]) {
 
   bool draw = false;
   bool export_images = false;
+  bool export_vti = false;
 
   filter_args contour_filter_args;
 
@@ -76,11 +77,12 @@ int main(int argc, char *argv[]) {
 
   app.add_flag("--draw", draw, "show video and detections")
       ->configurable(false);
-  ;
   app.add_flag("--export-images", export_images,
                "export an image of each particle")
       ->configurable(false);
-  ;
+  app.add_flag("--export-vti", export_vti,
+               "export VTK ImageData for each particle")
+      ->configurable(false);
   app.set_version_flag("--version,-v", CMAKE_PROJECT_VERSION,
                        "display version and exit");
 
@@ -306,12 +308,18 @@ int main(int argc, char *argv[]) {
 
     // output the particles
     write_particle_data(output_particles, results_output);
+
     if (export_images) {
       for (const auto &p : output_particles) {
         auto image_path = image_dir / std::to_string(p.id()).append(".png");
-        auto vtk_path = image_dir / std::to_string(p.id()).append(".vti");
         if (save_particle_image(p, image_path))
           return 1;
+      }
+    }
+
+    if (export_vti) {
+      for (const auto &p : output_particles) {
+        auto vtk_path = image_dir / std::to_string(p.id()).append(".vti");
         if (save_particle_point_data_vtk(p, vtk_path))
           return 1;
       }
@@ -336,10 +344,19 @@ int main(int argc, char *argv[]) {
   } // while
   // export any remaining particles
   write_particle_data(particles, results_output);
+
   if (export_images) {
     for (const auto &p : particles) {
       auto image_path = image_dir / std::to_string(p.id()).append(".png");
       if (save_particle_image(p, image_path))
+        return 1;
+    }
+  }
+
+  if (export_vti) {
+    for (const auto &p : particles) {
+      auto vtk_path = image_dir / std::to_string(p.id()).append(".vti");
+      if (save_particle_point_data_vtk(p, vtk_path))
         return 1;
     }
   }
