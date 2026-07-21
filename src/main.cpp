@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
   app.set_help_flag("");
   app.set_help_all_flag("-h,--help");
 
-  std::string inname, outname, confname;
+  std::string inname, outname;
 
   int background_frames = 1000;
   int particle_frames = 50;
@@ -43,6 +43,7 @@ int main(int argc, char *argv[]) {
   bool draw = false;
   bool export_images = false;
   bool export_hdf5 = false;
+  bool create_config = false;
 
   ParticleMetric selection_metric = PM_CENTER_WEIGHTED_DARK;
   std::map<std::string, ParticleMetric> metric_map = {
@@ -56,10 +57,11 @@ int main(int argc, char *argv[]) {
 
   filter_args contour_filter_args;
 
-  app.add_option("file", inname, "path to the captured OIM video")
-      ->required()
-      ->check(CLI::ExistingFile)
-      ->configurable(false);
+  auto file_opt =
+      app.add_option("file", inname, "path to the captured OIM video")
+          ->required()
+          ->check(CLI::ExistingFile, "FileExists")
+          ->configurable(false);
   app.add_option("--output,-o", outname,
                  "specify the output directory, defaults to 'processed'")
       ->check(CLI::NonexistentPath | CLI::ExistingDirectory)
@@ -132,20 +134,30 @@ int main(int argc, char *argv[]) {
                    "allowed particle sharpness")
       ->check(CLI::NonNegativeNumber);
 
-  app.set_config("--config", std::string(),
-                 "read options from a config file, if no path is passed "
-                 "creates a default config");
+  app.add_flag_callback(
+         "--create-config",
+         [&]() {
+           create_config = true;
+           file_opt->get_validator("FileExists")->active(false);
+           file_opt->check(CLI::NonexistentPath);
+         },
+         "write default values to a new config file at 'file'")
+      ->configurable(false)
+      ->callback_priority(CLI::CallbackPriority::First);
+  app.set_config("--config", std::string(), "read options from a config file");
 
   try {
     app.parse(argc, argv);
-  } catch (const CLI::FileError &e) {
-    std::string conf = app.get_config_ptr()->as<std::string>();
-    std::cout << "writing default config to " << conf << std::endl;
-    std::ofstream cfs(CLI::to_path(conf));
-    cfs << app.config_to_str(true);
-    return 0;
   } catch (const CLI::ParseError &e) {
     return app.exit(e);
+  }
+
+  if (create_config) {
+    std::ofstream cfs(CLI::to_path(inname));
+    std::cout << "deault config file created at " << inname << ", exiting"
+              << std::endl;
+    cfs << app.config_to_str(true);
+    return 0;
   }
 
   // Convert some of the parsed options
