@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
 
   bool draw = false;
   bool export_images = false;
-  bool export_vti = false;
+  bool export_hdf5 = false;
 
   filter_args contour_filter_args;
 
@@ -80,8 +80,8 @@ int main(int argc, char *argv[]) {
   app.add_flag("--export-images", export_images,
                "export an image of each particle")
       ->configurable(false);
-  app.add_flag("--export-vti", export_vti,
-               "export VTK ImageData for each particle")
+  app.add_flag("--export-hdf5", export_hdf5,
+               "export VTK compatible HDF5 data sets for each particle")
       ->configurable(false);
   app.set_version_flag("--version,-v", CMAKE_PROJECT_VERSION,
                        "display version and exit");
@@ -156,9 +156,13 @@ int main(int argc, char *argv[]) {
   // create output directory
 
   std::filesystem::create_directory(output_dir);
-  auto image_dir = output_dir / "particles";
+  auto image_dir = output_dir / "particle_images";
+  auto hdf5_dir = output_dir / "particle_hdf5";
   if (export_images) {
     std::filesystem::create_directory(image_dir);
+  }
+  if (export_hdf5) {
+    std::filesystem::create_directory(hdf5_dir);
   }
 
   // just used for date
@@ -317,10 +321,10 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    if (export_vti) {
+    if (export_hdf5) {
       for (const auto &p : output_particles) {
-        auto vtk_path = image_dir / std::to_string(p.id()).append(".vti");
-        if (save_particle_point_data_vtk(p, vtk_path))
+        auto h5_path = hdf5_dir / std::to_string(p.id()).append(".vtkhdf");
+        if (save_particle_data_hdf5(p, h5_path))
           return 1;
       }
     }
@@ -353,10 +357,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (export_vti) {
+  if (export_hdf5) {
     for (const auto &p : particles) {
-      auto vtk_path = image_dir / std::to_string(p.id()).append(".vti");
-      if (save_particle_point_data_vtk(p, vtk_path))
+      auto h5_path = hdf5_dir / std::to_string(p.id()).append(".vtkhdf");
+      if (save_particle_data_hdf5(p, h5_path))
         return 1;
     }
   }

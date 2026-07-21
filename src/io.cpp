@@ -1,10 +1,20 @@
 #include "io.hpp"
+#include <H5Cpp.h>
+#include <H5DataSpace.h>
+#include <H5Fpublic.h>
+#include <H5Group.h>
+#include <H5PredType.h>
+#include <H5Spublic.h>
+#include <H5StrType.h>
+#include <H5Tpublic.h>
+#include <H5public.h>
 #include <algorithm>
 #include <fstream>
 #include <iostream>
 
 #include <iterator>
 #include <opencv2/core.hpp>
+#include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <ostream>
@@ -170,5 +180,79 @@ bool save_particle_point_data_vtk(const Particle &particle,
   ofs << "\t\t</Piece>\n";
   ofs << "\t</ImageData>\n";
   ofs << "</VTKFile>\n";
+  return false;
+}
+
+bool save_particle_data_hdf5(const Particle &particle,
+                             const std::filesystem::path &path) {
+  cv::Rect bounds = particle.boundingRect();
+
+  std::vector<float> wbuf;
+  wbuf.reserve(bounds.height * bounds.width * particle.frameCount());
+  for (size_t z = 0; z < particle.frameCount(); ++z) {
+    const cv::Mat &image = particle.image(z);
+    cv::Rect rect = cv::boundingRect(particle.contour(z));
+    cv::Point offset = rect.tl() - bounds.tl();
+
+    for (size_t y = 0; y < bounds.height; ++y) {
+      for (size_t x = 0; x < bounds.width; ++x) {
+        int sx = x - offset.x;
+        int sy = y - offset.y;
+        if (sx >= 0 && sx < image.cols && sy >= 0 && sy < image.rows) {
+          wbuf.push_back(image.at<float>(sy, sx));
+        } else {
+          wbuf.push_back(0.f);
+        }
+      }
+    }
+  }
+
+  H5::H5File file(path, H5F_ACC_TRUNC);
+  H5::Group root = file.createGroup("VTKHDF");
+
+  int version[2] = {2, 3};
+
+  root.createAttribute("Version", H5::PredType::NATIVE_INT,
+                       H5::DataSpace(1, (hsize_t[]){2}))
+      .write(H5::PredType::NATIVE_INT, version);
+
+  H5::StrType str_type(H5::PredType::C_S1, H5T_VARIABLE);
+  root.createAttribute("Type", str_type, H5::DataSpace(H5S_SCALAR))
+      .write(str_type, std::string("ImageData"));
+
+  float extent[6] = {0.f, static_cast<float>(bounds.width - 1),
+                     0.f, static_cast<float>(bounds.height - 1),
+                     0.f, static_cast<float>(particle.frameCount() - 1)};
+  float origin[3] = {static_cast<float>(bounds.x), static_cast<float>(bounds.y),
+                     static_cast<float>(particle.frame(0))};
+  float spacing[3] = {1.f, 1.f, 1.f};
+  float direction[9] = {1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f};
+
+  root.createAttribute("WholeExtent", H5::PredType::NATIVE_FLOAT,
+                       H5::DataSpace(1, (hsize_t[]){6}))
+      .write(H5::PredType::NATIVE_FLOAT, extent);
+  root.createAttribute("Origin", H5::PredType::NATIVE_FLOAT,
+                       H5::DataSpace(1, (hsize_t[]){3}))
+      .write(H5::PredType::NATIVE_FLOAT, origin);
+  root.createAttribute("Spacing", H5::PredType::NATIVE_FLOAT,
+                       H5::DataSpace(1, (hsize_t[]){3}))
+      .write(H5::PredType::NATIVE_FLOAT, spacing);
+  root.createAttribute("Direction", H5::PredType::NATIVE_FLOAT,
+                       H5::DataSpace(1, (hsize_t[]){9}))
+      .write(H5::PredType::NATIVE_FLOAT, direction);
+
+  hsize_t dims[3] = {static_cast<hsize_t>(particle.frameCount()),
+                     static_cast<hsize_t>(bounds.height),
+                     static_cast<hsize_t>(bounds.width)};
+
+  H5::DSetCreatPropList props;
+  props.setChunk(3, dims);
+  props.setDeflate(1);
+
+  H5::Group point_data = root.createGroup("PointData");
+  H5::DataSet proc = point_data.createDataSet(
+      "Processed", H5::PredType::NATIVE_FLOAT, H5::DataSpace(3, dims), props);
+
+  proc.write(wbuf.data(), H5::PredType::NATIVE_FLOAT);
   return false;
 }

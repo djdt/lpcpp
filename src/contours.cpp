@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <execution>
 #include <iterator>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
@@ -92,8 +91,7 @@ double contour_minimum_feret(const std::vector<cv::Point> &contour) {
 void filter_contours(std::vector<std::vector<cv::Point>> &contours,
                      const cv::Mat &frame, const filter_args &args) {
   auto it = std::remove_if(
-      std::execution::par, contours.begin(), contours.end(),
-      [=](const std::vector<cv::Point> &c) {
+      contours.begin(), contours.end(), [=](const std::vector<cv::Point> &c) {
         cv::Moments moments = cv::moments(c);
         if (args.area.first != args.area.second) {
           if (moments.m00 < args.area.first || moments.m00 > args.area.second) {

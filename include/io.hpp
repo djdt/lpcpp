@@ -22,3 +22,6 @@ bool save_particle_image(const Particle &particle,
 
 bool save_particle_point_data_vtk(const Particle &particle,
                                   const std::filesystem::path &path);
+
+bool save_particle_data_hdf5(const Particle &particle,
+                             const std::filesystem::path &path);
