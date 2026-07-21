@@ -10,11 +10,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS Yes)
 
 add_compile_definitions(CMAKE_PROJECT_VERSION="${CMAKE_PROJECT_VERSION}")
 
+
 file(GLOB lpcpp_SRC "src/*.cpp" "include/*.hpp")
 
 add_executable(lpcpp ${lpcpp_SRC})
-target_include_directories(lpcpp PUBLIC "${CMAKE_SOURCE_DIR}/include")
+include_directories(lpcpp PUBLIC "${CMAKE_SOURCE_DIR}/include")
 
 find_package(OpenCV REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS})
-target_link_libraries(lpcpp PUBLIC ${OpenCV_LIBS} -ltbb)
+find_package(HDF5 REQUIRED COMPONENTS CXX)
+
+target_include_directories(lpcpp PRIVATE ${OpenCV_INCLUDE_DIRS} ${HDF5_INCLUDE_DIRS})
+target_link_libraries(lpcpp PRIVATE ${OpenCV_LIBS} HDF5::HDF5)
