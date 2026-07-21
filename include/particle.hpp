@@ -4,7 +4,15 @@
 #include <opencv2/core/mat.hpp>
 #include <vector>
 
-enum ParticleMetric { CENTER_WEIGHTED_INTENSITY = 0, INTENSITY = 1, SHARPNESS };
+enum ParticleMetric {
+  PM_CENTER_WEIGHTED_DARK,
+  PM_CENTER_WEIGHTED_LIGHT,
+  PM_CENTER_WEIGHTED_ABS,
+  PM_AVERAGE_DARK,
+  PM_AVERAGE_LIGHT,
+  PM_AVERAGE_ABS,
+  PM_SHARPNESS
+};
 
 class Particle {
 private:
@@ -25,7 +33,7 @@ public:
   // ensure a cv::Mat here
   Particle(const int frame_number, const std::vector<cv::Point> &contour,
            const cv::Mat &image, const cv::Mat &raw_image,
-           ParticleMetric metric = CENTER_WEIGHTED_INTENSITY);
+           ParticleMetric metric = PM_CENTER_WEIGHTED_DARK);
 
   const int frameCount() const;
   const long id() const;

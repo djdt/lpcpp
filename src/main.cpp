@@ -29,20 +29,30 @@ int main(int argc, char *argv[]) {
   app.set_help_flag("");
   app.set_help_all_flag("-h,--help");
 
-  std::string inname;
-  std::string outname;
-  std::string confname;
+  std::string inname, outname, confname;
 
   int background_frames = 1000;
   int particle_frames = 50;
+
   double particle_distance = 5.0;
   double zscore = 3.0;
   double unsharp_alpha = 1.0;
+
   std::array<float, 3> capillary = {0.f, 0.f, 0.f};
 
   bool draw = false;
   bool export_images = false;
   bool export_hdf5 = false;
+
+  ParticleMetric selection_metric = PM_CENTER_WEIGHTED_DARK;
+  std::map<std::string, ParticleMetric> metric_map = {
+      {"center", PM_CENTER_WEIGHTED_DARK},
+      {"centerWhite", PM_CENTER_WEIGHTED_LIGHT},
+      {"centerAbsolute", PM_CENTER_WEIGHTED_ABS},
+      {"intensity", PM_AVERAGE_DARK},
+      {"intensityWhite", PM_AVERAGE_LIGHT},
+      {"intensityAbsolute", PM_AVERAGE_ABS},
+      {"sharpness", PM_SHARPNESS}};
 
   filter_args contour_filter_args;
 
@@ -55,6 +65,11 @@ int main(int argc, char *argv[]) {
       ->check(CLI::NonexistentPath | CLI::ExistingDirectory)
       ->configurable(false);
 
+  app.add_option("--selection-metric,-m", selection_metric,
+                 "method of selecting the particle frame for processing. "
+                 "Currently center weighted intensity, average intensity and "
+                 "sharpness are implemented")
+      ->transform(CLI::CheckedTransformer(metric_map, CLI::ignore_case));
   app.add_option(
          "--background", background_frames,
          "number of background frames used to determine initial mean and std")

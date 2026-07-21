@@ -84,20 +84,35 @@ void Particle::update(const int frame_number,
 double calculate_selection_metric(const std::vector<cv::Point> &contour,
                                   cv::InputArray &image,
                                   ParticleMetric method) {
+  cv::Mat mask, buffer;
+  if (method < PM_SHARPNESS)
+    mask_for_contour(contour, mask);
+
   switch (method) {
-  case CENTER_WEIGHTED_INTENSITY: {
-    cv::Mat mask, weights;
-    mask_for_contour(contour, mask);
-    return image_center_weighted_intensity(image, mask, weights);
+  case PM_CENTER_WEIGHTED_DARK: {
+    return image_center_weighted_intensity(image, mask, buffer);
   }
-  case INTENSITY: {
-    cv::Mat mask;
-    mask_for_contour(contour, mask);
-    return image_intensity(image, mask);
+  case PM_CENTER_WEIGHTED_LIGHT: {
+    return -image_center_weighted_intensity(image, mask, buffer);
   }
-  case SHARPNESS: {
-    cv::Mat laplace;
-    return image_sharpness(image, laplace);
+  case PM_CENTER_WEIGHTED_ABS: {
+    cv::Mat abs_image;
+    cv::absdiff(image, 0.f, abs_image);
+    image_center_weighted_intensity(abs_image, mask, buffer);
+  }
+  case PM_AVERAGE_DARK: {
+    return image_intensity(image, mask) / cv::contourArea(contour);
+  }
+  case PM_AVERAGE_LIGHT: {
+    return -image_intensity(image, mask) / cv::contourArea(contour);
+  }
+  case PM_AVERAGE_ABS: {
+    cv::Mat abs_image;
+    cv::absdiff(image, 0.f, abs_image);
+    return image_intensity(abs_image, mask) / cv::contourArea(contour);
+  }
+  case PM_SHARPNESS: {
+    return image_sharpness(image, buffer);
   }
   default:
     throw "unknown selection metric";
