@@ -68,9 +68,7 @@ int main(int argc, char *argv[]) {
       ->configurable(false);
 
   app.add_option("--selection-metric,-m", selection_metric,
-                 "method of selecting the particle frame for processing. "
-                 "Currently center weighted intensity, average intensity and "
-                 "sharpness are implemented")
+                 "method of selecting the particle frame for processing")
       ->transform(CLI::CheckedTransformer(metric_map, CLI::ignore_case));
   app.add_option(
          "--background", background_frames,
