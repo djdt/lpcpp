@@ -187,10 +187,16 @@ bool save_particle_data_hdf5(const Particle &particle,
                              const std::filesystem::path &path) {
   cv::Rect bounds = particle.boundingRect();
 
-  std::vector<float> wbuf;
-  wbuf.reserve(bounds.height * bounds.width * particle.frameCount());
+  std::vector<float> buf;
+  buf.reserve(bounds.height * bounds.width * particle.frameCount());
+  std::vector<uchar> mbuf;
+  mbuf.reserve(bounds.height * bounds.width * particle.frameCount());
+
   for (size_t z = 0; z < particle.frameCount(); ++z) {
     const cv::Mat &image = particle.image(z);
+    cv::Mat mask;
+    mask_for_contour(particle.contour(z), mask);
+
     cv::Rect rect = cv::boundingRect(particle.contour(z));
     cv::Point offset = rect.tl() - bounds.tl();
 
@@ -199,9 +205,11 @@ bool save_particle_data_hdf5(const Particle &particle,
         int sx = x - offset.x;
         int sy = y - offset.y;
         if (sx >= 0 && sx < image.cols && sy >= 0 && sy < image.rows) {
-          wbuf.push_back(image.at<float>(sy, sx));
+          buf.push_back(image.at<float>(sy, sx));
+          mbuf.push_back(mask.at<uchar>(sy, sx));
         } else {
-          wbuf.push_back(0.f);
+          buf.push_back(0.f);
+          mbuf.push_back(0);
         }
       }
     }
@@ -220,26 +228,23 @@ bool save_particle_data_hdf5(const Particle &particle,
   root.createAttribute("Type", str_type, H5::DataSpace(H5S_SCALAR))
       .write(str_type, std::string("ImageData"));
 
-  float extent[6] = {0.f, static_cast<float>(bounds.width - 1),
-                     0.f, static_cast<float>(bounds.height - 1),
-                     0.f, static_cast<float>(particle.frameCount() - 1)};
-  float origin[3] = {static_cast<float>(bounds.x), static_cast<float>(bounds.y),
-                     static_cast<float>(particle.frame(0))};
-  float spacing[3] = {1.f, 1.f, 1.f};
-  float direction[9] = {1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f};
+  int extent[6] = {0, bounds.width, 0, bounds.height, 0, particle.frameCount()};
+  int origin[3] = {bounds.x, bounds.y, particle.frame(0)};
+  int spacing[3] = {1, 1, 1};
+  int direction[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 
-  root.createAttribute("WholeExtent", H5::PredType::NATIVE_FLOAT,
+  root.createAttribute("WholeExtent", H5::PredType::NATIVE_INT,
                        H5::DataSpace(1, (hsize_t[]){6}))
-      .write(H5::PredType::NATIVE_FLOAT, extent);
-  root.createAttribute("Origin", H5::PredType::NATIVE_FLOAT,
+      .write(H5::PredType::NATIVE_INT, extent);
+  root.createAttribute("Origin", H5::PredType::NATIVE_INT,
                        H5::DataSpace(1, (hsize_t[]){3}))
-      .write(H5::PredType::NATIVE_FLOAT, origin);
-  root.createAttribute("Spacing", H5::PredType::NATIVE_FLOAT,
+      .write(H5::PredType::NATIVE_INT, origin);
+  root.createAttribute("Spacing", H5::PredType::NATIVE_INT,
                        H5::DataSpace(1, (hsize_t[]){3}))
-      .write(H5::PredType::NATIVE_FLOAT, spacing);
-  root.createAttribute("Direction", H5::PredType::NATIVE_FLOAT,
+      .write(H5::PredType::NATIVE_INT, spacing);
+  root.createAttribute("Direction", H5::PredType::NATIVE_INT,
                        H5::DataSpace(1, (hsize_t[]){9}))
-      .write(H5::PredType::NATIVE_FLOAT, direction);
+      .write(H5::PredType::NATIVE_INT, direction);
 
   hsize_t dims[3] = {static_cast<hsize_t>(particle.frameCount()),
                      static_cast<hsize_t>(bounds.height),
@@ -249,10 +254,14 @@ bool save_particle_data_hdf5(const Particle &particle,
   props.setChunk(3, dims);
   props.setDeflate(1);
 
-  H5::Group point_data = root.createGroup("PointData");
+  H5::Group point_data = root.createGroup("CellData");
   H5::DataSet proc = point_data.createDataSet(
       "Processed", H5::PredType::NATIVE_FLOAT, H5::DataSpace(3, dims), props);
 
-  proc.write(wbuf.data(), H5::PredType::NATIVE_FLOAT);
+  H5::DataSet mask = point_data.createDataSet(
+      "Mask", H5::PredType::NATIVE_UCHAR, H5::DataSpace(3, dims), props);
+
+  proc.write(buf.data(), H5::PredType::NATIVE_FLOAT);
+  mask.write(mbuf.data(), H5::PredType::NATIVE_UCHAR);
   return false;
 }
