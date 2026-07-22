@@ -230,19 +230,19 @@ int main(int argc, char *argv[]) {
   cv::circle(capillary_mask, cv::Point(capillary[0], capillary[1]),
              capillary[2], 255, -1);
 
-  // setup arrays
+  // init the accumulated mean and variance
   cv::UMat acc_mean;
   cv::UMat acc_var = cv::UMat::zeros(frame.rows, frame.cols, CV_32F);
-
-  // init the accumulated mean and variance
   frame.convertTo(acc_mean, CV_32F);
 
   // begin by reading the required number of frames to predict the background
-  init_background(cap, acc_mean, acc_var, background_frames);
+  if (init_background(cap, acc_mean, acc_var, background_frames)) {
+    return 1;
+  }
 
   if (draw) {
     cv::namedWindow("frame", cv::WINDOW_NORMAL);
-    // cv::namedWindow("diff", cv::WINDOW_NORMAL);
+    cv::namedWindow("processed", cv::WINDOW_NORMAL);
   };
 
   // reset the video
@@ -271,7 +271,8 @@ int main(int argc, char *argv[]) {
 
     std::vector<Particle> new_particles;
 
-    preprocess_and_threshold(frame, acc_mean, acc_var, processed, threshold,
+    frame.convertTo(processed, CV_32F); // ensure type correct for preproc
+    preprocess_and_threshold(processed, acc_mean, acc_var, processed, threshold,
                              zscore, unsharp_alpha, preprocess_mode);
 
     cv::bitwise_and(threshold, capillary_mask, threshold);
@@ -327,11 +328,17 @@ int main(int argc, char *argv[]) {
     // create a color image and draw the contuors
     if (draw) {
       cv::UMat rgb_frame;
+      cv::UMat p;
+      double min, max;
+      cv::minMaxIdx(processed, &min, &max);
+      processed.convertTo(p, CV_8U, 255.0 / (max - min),
+                          -255.0 * min / (max - min));
       draw_particles_on_frame(frame, rgb_frame, particles);
       // draw capilary bounds
       cv::circle(rgb_frame, cv::Point(capillary[0], capillary[1]), capillary[2],
                  cv::Scalar(0, 255, 0), 1);
       cv::imshow("frame", rgb_frame);
+      cv::imshow("processed", p);
 
       int key = cv::waitKey(20);
       if (key == 'q') {
@@ -394,11 +401,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  cv::UMat acc_out(acc_mean);
-  acc_out.convertTo(acc_out, CV_8U);
+  cv::UMat acc_out, acc_var_out;
+  acc_mean.convertTo(acc_out, CV_8U);
   cv::imwrite((output_dir / "background_mean.png").string(), acc_out);
-  cv::UMat acc_var_out(acc_var);
-  acc_var_out.convertTo(acc_var_out, CV_8U);
+  acc_var.convertTo(acc_var_out, CV_8U);
   cv::imwrite((output_dir / "background_var.png").string(), acc_var_out);
 
   auto total_duration = std::chrono::duration<double>(

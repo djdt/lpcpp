@@ -55,7 +55,7 @@ void unsharp_mask(cv::InputArray &image, cv::OutputArray &output,
 
 void update_background(cv::InputArray &frame, cv::InputOutputArray &mean,
                        cv::InputOutputArray &var, int pos) {
-  double weight = 1.0 / static_cast<double>(pos);
+  double weight = 1.0 / std::max(1.0, static_cast<double>(pos));
 
   cv::addWeighted(frame, weight, mean, 1.0 - weight, 0.0, mean, CV_32F);
 
@@ -107,17 +107,15 @@ void preprocess_and_threshold(cv::InputArray &frame, cv::InputArray &mean,
                               cv::OutputArray &threshold, const double zscore,
                               const double unsharp_alpha,
                               const PreprocessImageMode mode) {
-  processed.create(frame.size(), CV_32F);
-  threshold.create(frame.size(), CV_8U);
+  processed.createSameSize(frame, CV_32F);
+  threshold.createSameSize(frame, CV_8U);
 
-  frame.copyTo(processed);
-
-  cv::subtract(frame, mean, processed, cv::noArray(), CV_32F);
-
-  if (mode == PROC_MODE_INVERT) {
-    cv::multiply(processed, -1.f, processed);
-  } else if (mode == PROC_MODE_ABSOLUTE) {
-    cv::absdiff(processed, 0.f, processed);
+  if (mode == PROC_MODE_ABSOLUTE) {
+    cv::absdiff(frame, mean, processed);
+  } else {
+    cv::subtract(frame, mean, processed, cv::noArray(), CV_32F);
+    if (mode == PROC_MODE_INVERT)
+      cv::multiply(processed, -1.f, processed);
   }
 
   // apply median blur for small defects
