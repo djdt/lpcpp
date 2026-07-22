@@ -10,7 +10,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS Yes)
 
 add_compile_definitions(CMAKE_PROJECT_VERSION="${CMAKE_PROJECT_VERSION}")
 
-
 file(GLOB lpcpp_SRC "src/*.cpp" "include/*.hpp")
 
 add_executable(lpcpp ${lpcpp_SRC})
