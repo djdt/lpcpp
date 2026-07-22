@@ -40,6 +40,7 @@ double image_intensity(cv::InputArray &image, cv::InputArray &mask) {
 
 double image_sharpness(cv::InputArray &image, cv::OutputArray &laplace) {
   laplace.createSameSize(image, CV_32F);
+
   cv::Laplacian(image, laplace, CV_32F);
   cv::Scalar mu, sigma;
   cv::meanStdDev(laplace, mu, sigma);
@@ -48,6 +49,8 @@ double image_sharpness(cv::InputArray &image, cv::OutputArray &laplace) {
 
 void unsharp_mask(cv::InputArray &image, cv::OutputArray &output,
                   double alpha = 1.0) {
+  output.createSameSize(image, CV_32F);
+
   cv::UMat sobelx, sobely, mag;
   cv::Sobel(image, sobelx, CV_32F, 1, 0, 3);
   cv::Sobel(image, sobely, CV_32F, 0, 1, 3);
@@ -112,12 +115,22 @@ void preprocess_and_threshold(cv::InputArray &frame, cv::InputArray &mean,
   processed.createSameSize(frame, CV_32F);
   threshold.createSameSize(frame, CV_8U);
 
-  if (mode == PROC_MODE_ABSOLUTE) {
+  switch (mode) {
+  case PROC_MODE_ABSOLUTE: {
     cv::absdiff(frame, mean, processed);
-  } else {
+    break;
+  }
+  case PROC_MODE_NORMAL: {
     cv::subtract(frame, mean, processed, cv::noArray(), CV_32F);
-    if (mode == PROC_MODE_INVERT)
-      cv::multiply(processed, -1.f, processed);
+    break;
+  }
+  case PROC_MODE_INVERT: {
+    // same as normal * -1
+    cv::subtract(mean, frame, processed, cv::noArray(), CV_32F);
+    break;
+  }
+  default:
+    throw "unknown processing method ";
   }
 
   // apply median blur for small defects
