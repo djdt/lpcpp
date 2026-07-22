@@ -296,12 +296,20 @@ int main(int argc, char *argv[]) {
         [&](const std::vector<cv::Point> &contour) {
           bool existing = false;
           for (auto &particle : particles) {
-            // check circles first
-            double dist = contour_box_distance(contour, particle.contour());
+            cv::Rect rect = cv::boundingRect(contour);
+            cv::Rect particle_rect = cv::boundingRect(particle.contour());
+            // check boxes first, early exit if far
+            double dist = box_distance(rect, particle_rect);
             if (dist > particle_distance)
               continue;
-            // finer check for close particles
-            dist = contour_distance(contour, particle.contour());
+
+            // finer check for close particles, larger contour as first
+            if (rect.size().area() > particle_rect.size().area()) {
+              dist = contour_distance(contour, particle.contour());
+            } else {
+              dist = contour_distance(particle.contour(), contour);
+            }
+
             if (dist < particle_distance) {
               particle.update(frame_pos, contour, cpu_proc, cpu_frame);
               existing = true;
