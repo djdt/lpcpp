@@ -8,6 +8,16 @@
 #include <opencv2/imgproc.hpp>
 #include <vector>
 
+double box_distance(const cv::Rect &rect_a, const cv::Rect &rect_b) {
+  cv::Point2f center_a = cv::Point2f(rect_a.x + rect_a.width / 2.f,
+                                     rect_a.y + rect_a.height / 2.f);
+  cv::Point2f center_b = cv::Point2f(rect_b.x + rect_b.width / 2.f,
+                                     rect_b.y + rect_b.height / 2.f);
+  return cv::norm(center_a - center_b) - (cv::norm(rect_a.tl() - rect_a.br()) +
+                                          cv::norm(rect_b.tl() - rect_b.br())) /
+                                             2.0;
+}
+
 double contour_aspect(const std::vector<cv::Point> &contour) {
   cv::RotatedRect rect = cv::minAreaRect(contour);
   double aspect = rect.size.aspectRatio();
@@ -44,13 +54,7 @@ double contour_box_distance(const std::vector<cv::Point> &contour_a,
                             const std::vector<cv::Point> &contour_b) {
   cv::Rect rect_a = cv::boundingRect(contour_a);
   cv::Rect rect_b = cv::boundingRect(contour_b);
-  cv::Point2f center_a = cv::Point2f(rect_a.x + rect_a.width / 2.f,
-                                     rect_a.y + rect_a.height / 2.f);
-  cv::Point2f center_b = cv::Point2f(rect_b.x + rect_b.width / 2.f,
-                                     rect_b.y + rect_b.height / 2.f);
-  return cv::norm(center_a - center_b) - (cv::norm(rect_a.tl() - rect_a.br()) +
-                                          cv::norm(rect_b.tl() - rect_b.br())) /
-                                             2.0;
+  return box_distance(rect_a, rect_b);
 }
 
 double contour_circle_distance(const std::vector<cv::Point> &contour_a,
@@ -70,10 +74,10 @@ double contour_distance(const std::vector<cv::Point> &contour_a,
                         const std::vector<cv::Point> &contour_b) {
   // possible to approximate with getClosestEllipsePoints
   std::vector<double> dists;
-  dists.reserve(contour_a.size());
-  std::transform(contour_a.begin(), contour_a.end(), std::back_inserter(dists),
-                 [&contour_b](const cv::Point &p) {
-                   return contour_distance(contour_b, p);
+  dists.reserve(contour_b.size());
+  std::transform(contour_b.begin(), contour_b.end(), std::back_inserter(dists),
+                 [&contour_a](const cv::Point &p) {
+                   return contour_distance(contour_a, p);
                  });
   return *std::min_element(dists.begin(), dists.end());
 }

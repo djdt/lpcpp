@@ -14,6 +14,8 @@ struct filter_args {
   std::pair<double, double> sharpness = {0.0, 0.0};
 };
 
+double box_distance(const cv::Rect &rect_a, const cv::Rect &rect_b);
+
 // double contour_area(const std::vector<cv::Point> &contour);
 double contour_aspect(const std::vector<cv::Point> &contour);
 
