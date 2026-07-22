@@ -310,15 +310,15 @@ int main(int argc, char *argv[]) {
             cv::Rect rect = cv::boundingRect(contour);
             cv::Rect particle_rect = cv::boundingRect(particle.contour());
             // check boxes first, early exit if far
-            double dist = box_distance(rect, particle_rect);
+            double dist = box_edge_distance(rect, particle_rect);
             if (dist > particle_distance)
               continue;
 
             // finer check for close particles, larger contour as first
             if (rect.size().area() > particle_rect.size().area()) {
-              dist = contour_distance(contour, particle.contour());
+              dist = contour_edge_distance(contour, particle.contour());
             } else {
-              dist = contour_distance(particle.contour(), contour);
+              dist = contour_edge_distance(particle.contour(), contour);
             }
 
             if (dist < particle_distance) {
@@ -365,6 +365,8 @@ int main(int argc, char *argv[]) {
     if (export_images) {
       for (const auto &p : output_particles) {
         auto image_path = image_dir / std::to_string(p.id()).append(".png");
+        auto contr_path = image_dir / std::to_string(p.id()).append(".dat");
+        save_particle_contours(p, contr_path);
         if (save_particle_image(p, image_path))
           return 1;
       }
