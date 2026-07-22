@@ -41,7 +41,7 @@ void draw_particles_on_frame(cv::InputArray &input,
 void write_particle_header(std::ofstream &ofs) {
   ofs << "id,frame,frame_count,area,aspect,circular_equivalent_diameter,"
          "circularity,convexity,intensity,maximum_feret,minimum_feret,mean_"
-         "radius,perimeter,sharpness,x,y"
+         "diameter,perimeter,sharpness,x,y"
       << std::endl;
 }
 
@@ -67,11 +67,24 @@ void write_particle_data(const std::vector<Particle> &particles,
     ofs << image_intensity(it->image(), mask) << ",";
     ofs << contour_maximum_feret(contour) << ",";
     ofs << contour_minimum_feret(contour) << ",";
-    ofs << contour_distance(contour, center);
+    ofs << contour_mean_distance(contour, center);
     ofs << cv::arcLength(contour, true) << ",";
     ofs << image_sharpness(it->image(), mask) << ",";
     ofs << center.x << "," << center.y << std::endl;
   }
+}
+
+bool save_particle_contours(const Particle &particle,
+                            const std::filesystem::path &path) {
+  std::ofstream ofs(path, std::ios::binary);
+  for (int z = 0; z < particle.frameCount(); ++z) {
+    const auto &contour = particle.contour(z);
+    for (const auto &p : contour) {
+      ofs.write(reinterpret_cast<const char *>(&z), sizeof(z));
+      ofs.write(reinterpret_cast<const char *>(&p), sizeof(p));
+    }
+  }
+  return false;
 }
 
 bool save_particle_image(const Particle &particle,
