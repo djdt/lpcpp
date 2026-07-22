@@ -4,14 +4,10 @@
 #include <opencv2/core/mat.hpp>
 #include <vector>
 
-enum ParticleMetric {
-  PM_AVERAGE_DARK,
-  PM_AVERAGE_LIGHT,
-  PM_AVERAGE_ABS,
-  PM_CENTER_WEIGHTED_DARK,
-  PM_CENTER_WEIGHTED_LIGHT,
-  PM_CENTER_WEIGHTED_ABS,
-  PM_SHARPNESS,
+enum ParticleFrameMetric {
+  METRIC_AVERAGE_INTENSITY,
+  METRIC_CENTER_WEIGHTED_INTENSITY,
+  METRIC_SHARPNESS,
 };
 
 class Particle {
@@ -19,7 +15,7 @@ private:
   static long id_counter;
   long _id;
 
-  ParticleMetric _metric_method;
+  ParticleFrameMetric _metric_method;
   double _metric;
 
   std::vector<cv::Mat> _images;
@@ -33,7 +29,7 @@ public:
   // ensure a cv::Mat here
   Particle(const int frame_number, const std::vector<cv::Point> &contour,
            const cv::Mat &image, const cv::Mat &raw_image,
-           ParticleMetric metric = PM_CENTER_WEIGHTED_DARK);
+           ParticleFrameMetric metric = METRIC_CENTER_WEIGHTED_INTENSITY);
 
   const int frameCount() const;
   const long id() const;
@@ -52,4 +48,5 @@ public:
 };
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,
-                                  cv::InputArray &image, ParticleMetric metric);
+                                  cv::InputArray &image,
+                                  ParticleFrameMetric metric);

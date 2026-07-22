@@ -9,7 +9,7 @@
 
 Particle::Particle(const int frame_number,
                    const std::vector<cv::Point> &contour, const cv::Mat &image,
-                   const cv::Mat &raw_image, const ParticleMetric method)
+                   const cv::Mat &raw_image, const ParticleFrameMetric method)
     : _id(id_counter++), _index(0), _metric_method(method) {
 
   cv::Rect rect = cv::boundingRect(contour);
@@ -83,35 +83,21 @@ void Particle::update(const int frame_number,
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,
                                   cv::InputArray &image,
-                                  ParticleMetric method) {
-  cv::Mat mask, buffer;
-  if (method < PM_SHARPNESS)
-    mask_for_contour(contour, mask);
+                                  ParticleFrameMetric method) {
 
   switch (method) {
-  case PM_CENTER_WEIGHTED_DARK: {
+  case METRIC_CENTER_WEIGHTED_INTENSITY: {
+    cv::Mat mask, buffer;
+    mask_for_contour(contour, mask);
     return image_center_weighted_intensity(image, mask, buffer);
   }
-  case PM_CENTER_WEIGHTED_LIGHT: {
-    return -image_center_weighted_intensity(image, mask, buffer);
-  }
-  case PM_CENTER_WEIGHTED_ABS: {
-    cv::Mat abs_image;
-    cv::absdiff(image, 0.f, abs_image);
-    image_center_weighted_intensity(abs_image, mask, buffer);
-  }
-  case PM_AVERAGE_DARK: {
+  case METRIC_AVERAGE_INTENSITY: {
+    cv::Mat mask;
+    mask_for_contour(contour, mask);
     return image_intensity(image, mask) / cv::contourArea(contour);
   }
-  case PM_AVERAGE_LIGHT: {
-    return -image_intensity(image, mask) / cv::contourArea(contour);
-  }
-  case PM_AVERAGE_ABS: {
-    cv::Mat abs_image;
-    cv::absdiff(image, 0.f, abs_image);
-    return image_intensity(abs_image, mask) / cv::contourArea(contour);
-  }
-  case PM_SHARPNESS: {
+  case METRIC_SHARPNESS: {
+    cv::Mat buffer;
     return image_sharpness(image, buffer);
   }
   default:

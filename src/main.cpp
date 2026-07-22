@@ -45,15 +45,16 @@ int main(int argc, char *argv[]) {
   bool export_hdf5 = false;
   bool create_config = false;
 
-  ParticleMetric selection_metric = PM_CENTER_WEIGHTED_DARK;
-  std::map<std::string, ParticleMetric> metric_map = {
-      {"center", PM_CENTER_WEIGHTED_DARK},
-      {"centerWhite", PM_CENTER_WEIGHTED_LIGHT},
-      {"centerAbsolute", PM_CENTER_WEIGHTED_ABS},
-      {"intensity", PM_AVERAGE_DARK},
-      {"intensityWhite", PM_AVERAGE_LIGHT},
-      {"intensityAbsolute", PM_AVERAGE_ABS},
-      {"sharpness", PM_SHARPNESS}};
+  ParticleFrameMetric selection_metric = METRIC_CENTER_WEIGHTED_INTENSITY;
+  std::map<std::string, ParticleFrameMetric> metric_map = {
+      {"averageIntensity", METRIC_AVERAGE_INTENSITY},
+      {"centralIntensity", METRIC_CENTER_WEIGHTED_INTENSITY},
+      {"sharpness", METRIC_SHARPNESS}};
+  PreprocessImageMode preprocess_mode = PROC_MODE_INVERT;
+  std::map<std::string, PreprocessImageMode> mode_map = {
+      {"light", PROC_MODE_NORMAL},
+      {"dark", PROC_MODE_INVERT},
+      {"absolute", PROC_MODE_ABSOLUTE}};
 
   filter_args contour_filter_args;
 
@@ -67,9 +68,13 @@ int main(int argc, char *argv[]) {
       ->check(CLI::NonexistentPath | CLI::ExistingDirectory)
       ->configurable(false);
 
-  app.add_option("--selection-metric,-m", selection_metric,
+  app.add_option("--selection-metric", selection_metric,
                  "method of selecting the particle frame for processing")
       ->transform(CLI::CheckedTransformer(metric_map, CLI::ignore_case));
+  app.add_option("--image-mode", preprocess_mode,
+                 "detection of light or dark regions or the absolute "
+                 "difference from mean")
+      ->transform(CLI::CheckedTransformer(mode_map, CLI::ignore_case));
   app.add_option(
          "--background", background_frames,
          "number of background frames used to determine initial mean and std")
@@ -268,7 +273,7 @@ int main(int argc, char *argv[]) {
     std::vector<Particle> new_particles;
 
     preprocess_and_threshold(frame, acc_mean, acc_var, processed, threshold,
-                             zscore, unsharp_alpha);
+                             zscore, unsharp_alpha, preprocess_mode);
 
     cv::bitwise_and(threshold, capillary_mask, threshold);
     // get contours
