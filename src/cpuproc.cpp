@@ -1,11 +1,12 @@
+#include "cpuproc.hpp"
+#include "util.hpp"
+
 #include <iomanip>
 #include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
 #include <vector>
-
-#include "util.hpp"
 
 std::array<float, 3> find_capillary(cv::InputArray &input) {
   std::vector<cv::Vec3f> circles;
@@ -104,14 +105,20 @@ bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
 void preprocess_and_threshold(cv::InputArray &frame, cv::InputArray &mean,
                               cv::InputArray &var, cv::OutputArray &processed,
                               cv::OutputArray &threshold, const double zscore,
-                              const double unsharp_alpha) {
+                              const double unsharp_alpha,
+                              const PreprocessImageMode mode) {
   processed.create(frame.size(), CV_32F);
   threshold.create(frame.size(), CV_8U);
 
   frame.copyTo(processed);
 
   cv::subtract(frame, mean, processed, cv::noArray(), CV_32F);
-  cv::multiply(processed, -1.f, processed);
+
+  if (mode == PROC_MODE_INVERT) {
+    cv::multiply(processed, -1.f, processed);
+  } else if (mode == PROC_MODE_ABSOLUTE) {
+    cv::absdiff(processed, 0.f, processed);
+  }
 
   // apply median blur for small defects
   cv::medianBlur(processed, processed, 5);
