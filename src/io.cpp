@@ -70,19 +70,20 @@ void write_particle_data(const std::vector<Particle> &particles,
     ofs << contour_mean_distance(contour, center);
     ofs << cv::arcLength(contour, true) << ",";
     ofs << image_sharpness(it->image(), mask) << ",";
-    ofs << center.x << "," << center.y << std::endl;
+    ofs << center.x << "," << center.y << "\n";
   }
+  ofs.flush();
 }
 
 bool save_particle_contours(const Particle &particle,
                             const std::filesystem::path &path) {
-  std::ofstream ofs(path, std::ios::binary);
+  std::ofstream ofs(path);
   for (int z = 0; z < particle.frameCount(); ++z) {
     const auto &contour = particle.contour(z);
     for (const auto &p : contour) {
-      ofs.write(reinterpret_cast<const char *>(&z), sizeof(z));
-      ofs.write(reinterpret_cast<const char *>(&p), sizeof(p));
+      ofs << p.x << " " << p.y << " ";
     }
+    ofs << "\n";
   }
   return false;
 }
