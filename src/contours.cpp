@@ -1,12 +1,15 @@
 #include "contours.hpp"
+
 #include "cpuproc.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <iterator>
-#include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
 #include <vector>
+
+#include <opencv2/core.hpp>
+#include <opencv2/geometry.hpp>
+#include <opencv2/imgproc.hpp>
 
 double box_distance(const cv::Rect &rect_a, const cv::Rect &rect_b) {
   cv::Point2f center_a = cv::Point2f(rect_a.x + rect_a.width / 2.f,

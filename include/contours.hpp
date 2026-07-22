@@ -1,8 +1,8 @@
 #pragma once
 
-#include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
 #include <vector>
+
+#include <opencv2/core.hpp>
 
 struct filter_args {
   std::pair<double, double> area = {5.0, 1e4};

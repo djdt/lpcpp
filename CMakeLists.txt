@@ -16,7 +16,7 @@ file(GLOB lpcpp_SRC "src/*.cpp" "include/*.hpp")
 add_executable(lpcpp ${lpcpp_SRC})
 include_directories(lpcpp PUBLIC "${CMAKE_SOURCE_DIR}/include")
 
-find_package(OpenCV REQUIRED)
+find_package(OpenCV 5.0 REQUIRED)
 find_package(HDF5 REQUIRED COMPONENTS CXX)
 
 target_include_directories(lpcpp PRIVATE ${OpenCV_INCLUDE_DIRS} ${HDF5_INCLUDE_DIRS})

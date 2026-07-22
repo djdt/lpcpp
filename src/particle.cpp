@@ -1,11 +1,12 @@
 #include "particle.hpp"
+
 #include "contours.hpp"
 #include "cpuproc.hpp"
 
-#include <opencv2/core.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/imgproc.hpp>
 #include <vector>
+
+#include <opencv2/core.hpp>
+#include <opencv2/geometry.hpp>
 
 Particle::Particle(const int frame_number,
                    const std::vector<cv::Point> &contour, const cv::Mat &image,

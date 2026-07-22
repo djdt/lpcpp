@@ -1,8 +1,8 @@
 #pragma once
 
-#include <opencv2/core.hpp>
-#include <opencv2/core/mat.hpp>
 #include <vector>
+
+#include <opencv2/core.hpp>
 
 enum ParticleFrameMetric {
   METRIC_AVERAGE_INTENSITY,

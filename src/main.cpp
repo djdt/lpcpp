@@ -1,15 +1,3 @@
-#include <algorithm>
-#include <chrono>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <iterator>
-#include <opencv2/core.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
-#include <string>
-#include <vector>
-
 #include "CLI11.hpp"
 
 #include "contours.hpp"
@@ -17,6 +5,20 @@
 #include "io.hpp"
 #include "particle.hpp"
 #include "util.hpp"
+
+#include <algorithm>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <string>
+#include <vector>
+
+#include <opencv2/core.hpp>
+#include <opencv2/geometry.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 #ifndef CMAKE_PROJECT_VERSION
 #define CMAKE_PROJECT_VERSION "0.0.0"

@@ -1,12 +1,14 @@
 #include "cpuproc.hpp"
+
 #include "util.hpp"
 
 #include <iomanip>
 #include <iostream>
-#include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/videoio.hpp>
 #include <vector>
+
+#include <opencv2/core.hpp>
+#include <opencv2/geometry.hpp>
+#include <opencv2/imgproc.hpp>
 
 std::array<float, 3> find_capillary(cv::InputArray &input) {
   std::vector<cv::Vec3f> circles;

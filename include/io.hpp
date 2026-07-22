@@ -1,11 +1,10 @@
 #pragma once
 
+#include "particle.hpp"
+
 #include <filesystem>
 #include <fstream>
-#include <opencv2/imgproc.hpp>
 #include <vector>
-
-#include "particle.hpp"
 
 void draw_particles_on_frame(cv::InputArray &input,
                              cv::InputOutputArray &output,

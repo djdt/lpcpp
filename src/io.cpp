@@ -1,28 +1,22 @@
 #include "io.hpp"
-#include <H5Cpp.h>
-#include <H5DataSpace.h>
-#include <H5Fpublic.h>
-#include <H5Group.h>
-#include <H5PredType.h>
-#include <H5Spublic.h>
-#include <H5StrType.h>
-#include <H5Tpublic.h>
-#include <H5public.h>
-#include <algorithm>
-#include <fstream>
-#include <iostream>
-
-#include <iterator>
-#include <opencv2/core.hpp>
-#include <opencv2/core/types.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/imgproc.hpp>
-#include <ostream>
-#include <vector>
 
 #include "contours.hpp"
 #include "cpuproc.hpp"
 #include "particle.hpp"
+
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <ostream>
+#include <vector>
+
+#include <H5Cpp.h>
+
+#include <opencv2/core.hpp>
+#include <opencv2/geometry.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 
 void draw_particles_on_frame(cv::InputArray &input,
                              cv::InputOutputArray &output,
