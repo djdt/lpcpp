@@ -1,13 +1,12 @@
-#include <algorithm>
-#include <execution>
+#include "cpuproc.hpp"
+#include "util.hpp"
+
 #include <iomanip>
 #include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
-
-#include "particle.hpp"
-#include "util.hpp"
+#include <vector>
 
 std::array<float, 3> find_capillary(cv::InputArray &input) {
   std::vector<cv::Vec3f> circles;
@@ -21,6 +20,30 @@ std::array<float, 3> find_capillary(cv::InputArray &input) {
   return {circles[0][0], circles[0][1], circles[0][2]};
 }
 
+double image_center_weighted_intensity(cv::InputArray &image,
+                                       cv::InputArray &mask,
+                                       cv::OutputArray &weights) {
+  weights.createSameSize(image, CV_32F);
+  cv::distanceTransform(mask, weights, cv::DIST_L2, cv::DIST_MASK_3);
+  cv::multiply(weights, image, weights, 1.0 / cv::sum(weights)[0]);
+  return cv::sum(weights)[0];
+}
+
+double image_intensity(cv::InputArray &image, cv::InputArray &mask) {
+  if (mask.empty()) {
+    return cv::sum(image)[0];
+  }
+  return cv::mean(image, mask)[0] * cv::countNonZero(mask);
+}
+
+double image_sharpness(cv::InputArray &image, cv::OutputArray &laplace) {
+  laplace.createSameSize(image, CV_32F);
+  cv::Laplacian(image, laplace, CV_32F);
+  cv::Scalar mu, sigma;
+  cv::meanStdDev(laplace, mu, sigma);
+  return sigma[0];
+}
+
 void unsharp_mask(cv::InputArray &image, cv::OutputArray &output,
                   double alpha = 1.0) {
   cv::UMat sobelx, sobely, mag;
@@ -32,7 +55,7 @@ void unsharp_mask(cv::InputArray &image, cv::OutputArray &output,
 
 void update_background(cv::InputArray &frame, cv::InputOutputArray &mean,
                        cv::InputOutputArray &var, int pos) {
-  double weight = 1.0 / static_cast<double>(pos);
+  double weight = 1.0 / std::max(1.0, static_cast<double>(pos));
 
   cv::addWeighted(frame, weight, mean, 1.0 - weight, 0.0, mean, CV_32F);
 
@@ -79,146 +102,33 @@ bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
   return false;
 }
 
-void find_particles(cv::InputArray &frame, cv::InputArray &mean,
-                    cv::InputArray &var, const double zscore,
-                    cv::InputArray &mask, const double unsharp_alpha,
-                    std::vector<Particle> &particles, const int current_frame) {
-  // calculate the difference between frame and mean
-  cv::UMat diff;
-  frame.copyTo(diff);
-  diff.convertTo(diff, CV_32F);
-  // frame.getMat().convertTo(diff, CV_32F);
-  cv::subtract(diff, mean, diff);
-  cv::multiply(diff, -1.f, diff);
+void preprocess_and_threshold(cv::InputArray &frame, cv::InputArray &mean,
+                              cv::InputArray &var, cv::OutputArray &processed,
+                              cv::OutputArray &threshold, const double zscore,
+                              const double unsharp_alpha,
+                              const PreprocessImageMode mode) {
+  processed.createSameSize(frame, CV_32F);
+  threshold.createSameSize(frame, CV_8U);
 
-  // median blur
-  cv::medianBlur(diff, diff, 5);
+  if (mode == PROC_MODE_ABSOLUTE) {
+    cv::absdiff(frame, mean, processed);
+  } else {
+    cv::subtract(frame, mean, processed, cv::noArray(), CV_32F);
+    if (mode == PROC_MODE_INVERT)
+      cv::multiply(processed, -1.f, processed);
+  }
 
-  // sharpen
+  // apply median blur for small defects
+  cv::medianBlur(processed, processed, 5);
+
+  // sharpen image to reduce particle edge blur
   if (unsharp_alpha > 0.0)
-    unsharp_mask(diff, diff, unsharp_alpha);
+    unsharp_mask(processed, processed, unsharp_alpha);
 
   // mask differences below x std deviations
   cv::UMat std;
   cv::sqrt(var, std);
   cv::multiply(std, zscore, std);
 
-  cv::UMat thresh = cv::UMat(frame.rows(), frame.cols(), CV_8U);
-  cv::compare(diff, std, thresh, cv::CMP_GT);
-
-  cv::bitwise_and(thresh, mask, thresh);
-
-  std::vector<std::vector<cv::Point>> contours;
-  cv::findContours(thresh, contours, cv::RETR_EXTERNAL,
-                   cv::CHAIN_APPROX_SIMPLE);
-
-  const cv::Mat cpu_diff = diff.getMat(cv::ACCESS_READ);
-  particles.reserve(contours.size());
-  std::transform(contours.begin(), contours.end(),
-                 std::back_inserter(particles),
-                 [&](const std::vector<cv::Point> &contour) {
-                   return Particle(contour, cpu_diff, current_frame);
-                 });
-}
-
-void filter_particles(std::vector<Particle> &particles,
-                      struct filter_args args) {
-  particles.erase(
-      std::remove_if(
-          std::execution::par, particles.begin(), particles.end(),
-          [=](Particle &p) {
-            if (args.area.first != args.area.second) {
-              double area = p.area();
-              if (area < args.area.first or area > args.area.second) {
-                return true;
-              }
-            }
-            if (args.aspect.first != args.aspect.second) {
-              double aspect = p.aspect();
-              if (aspect < args.aspect.first or aspect > args.aspect.second) {
-                return true;
-              }
-            }
-            if (args.circularity.first != args.circularity.second) {
-              double circularity = p.circularity();
-              if (circularity < args.circularity.first or
-                  circularity > args.circularity.second) {
-                return true;
-              }
-            }
-            if (args.convexity.first != args.convexity.second) {
-              double convexity = p.convexity();
-              if (convexity < args.convexity.first or
-                  convexity > args.convexity.second) {
-                return true;
-              }
-            }
-            if (args.radius.first != args.radius.second) {
-              double radius = p.radius();
-              if (radius < args.radius.first or radius > args.radius.second) {
-                return true;
-              }
-            }
-            if (args.intensity.first != args.intensity.second) {
-              double intensity = p.intensity();
-              if (intensity < args.intensity.first or
-                  intensity > args.intensity.second) {
-                return true;
-              }
-            }
-            if (args.sharpness.first != args.sharpness.second) {
-              double sharpness = p.sharpness();
-              if (sharpness < args.sharpness.first or
-                  sharpness > args.sharpness.second) {
-                return true;
-              }
-            }
-            return false;
-          }),
-      particles.end());
-}
-
-void filter_existing_particles(
-    std::vector<Particle> &old_particles, std::vector<Particle> &new_particles,
-    const std::function<bool(const Particle &, const Particle &)> comparison,
-    const double edge_distance) {
-  std::vector<size_t> remove_new_at;
-  old_particles.erase(
-      std::remove_if(
-          std::execution::seq, old_particles.begin(), old_particles.end(),
-          [&](Particle &old) {
-            for (auto it_new = new_particles.begin();
-                 it_new != new_particles.end(); ++it_new) {
-
-              if (it_new->isClose(old, edge_distance)) {
-
-                if (comparison(*it_new, old)) {
-                  it_new->addFrames(
-                      old.frameCount()); // inherit old particle count
-                  return true;           // old is removed
-                } else {
-                  // remove new
-                  size_t idx = std::distance(new_particles.begin(), it_new);
-                  if (remove_new_at.size() == 0 or
-                      remove_new_at.back() != idx) {
-                    remove_new_at.push_back(idx);
-                  }
-                  old.addFrames(1);
-                  return false;
-                }
-              }
-            }
-            return false;
-          }),
-      old_particles.end());
-
-  // sort and remove non-unqiue indicies
-  std::sort(remove_new_at.begin(), remove_new_at.end());
-  auto last = std::unique(remove_new_at.begin(), remove_new_at.end());
-  remove_new_at.erase(last, remove_new_at.end());
-
-  new_particles.erase(remove_indices(new_particles.begin(), new_particles.end(),
-                                     remove_new_at.begin(),
-                                     remove_new_at.end()),
-                      new_particles.end());
+  cv::compare(processed, std, threshold, cv::CMP_GT);
 }
