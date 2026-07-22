@@ -71,9 +71,8 @@ int main(int argc, char *argv[]) {
   app.add_option("--selection-metric", selection_metric,
                  "method of selecting the particle frame for processing")
       ->transform(CLI::CheckedTransformer(metric_map, CLI::ignore_case));
-  app.add_option("--image-mode", preprocess_mode,
-                 "detection of light or dark regions or the absolute "
-                 "difference from mean")
+  app.add_option("--detection-mode", preprocess_mode,
+                 "method of thresholding differences from the background")
       ->transform(CLI::CheckedTransformer(mode_map, CLI::ignore_case));
   app.add_option(
          "--background", background_frames,
