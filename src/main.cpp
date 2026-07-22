@@ -244,7 +244,6 @@ int main(int argc, char *argv[]) {
 
   if (draw) {
     cv::namedWindow("frame", cv::WINDOW_NORMAL);
-    cv::namedWindow("processed", cv::WINDOW_NORMAL);
   };
 
   // reset the video
@@ -338,17 +337,11 @@ int main(int argc, char *argv[]) {
     // create a color image and draw the contuors
     if (draw) {
       cv::UMat rgb_frame;
-      cv::UMat p;
-      double min, max;
-      cv::minMaxIdx(processed, &min, &max);
-      processed.convertTo(p, CV_8U, 255.0 / (max - min),
-                          -255.0 * min / (max - min));
       draw_particles_on_frame(frame, rgb_frame, particles);
       // draw capilary bounds
       cv::circle(rgb_frame, cv::Point(capillary[0], capillary[1]), capillary[2],
                  cv::Scalar(0, 255, 0), 1);
       cv::imshow("frame", rgb_frame);
-      cv::imshow("processed", p);
 
       int key = cv::waitKey(20);
       if (key == 'q') {
