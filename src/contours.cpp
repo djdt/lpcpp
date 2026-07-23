@@ -5,20 +5,28 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
-#include <vector>
-
+#include <numeric>
 #include <opencv2/core.hpp>
 #include <opencv2/geometry.hpp>
 #include <opencv2/imgproc.hpp>
+#include <vector>
 
-double box_distance(const cv::Rect &rect_a, const cv::Rect &rect_b) {
-  cv::Point2f center_a = cv::Point2f(rect_a.x + rect_a.width / 2.f,
-                                     rect_a.y + rect_a.height / 2.f);
-  cv::Point2f center_b = cv::Point2f(rect_b.x + rect_b.width / 2.f,
-                                     rect_b.y + rect_b.height / 2.f);
-  return cv::norm(center_a - center_b) - (cv::norm(rect_a.tl() - rect_a.br()) +
-                                          cv::norm(rect_b.tl() - rect_b.br())) /
-                                             2.0;
+double box_edge_distance(const cv::Rect &rect_a, const cv::Rect &rect_b) {
+  cv::Point2f hsize_a = cv::Point2f(rect_a.width, rect_a.height) / 2.f;
+  cv::Point2f hsize_b = cv::Point2f(rect_b.width, rect_b.height) / 2.f;
+
+  cv::Point2f center_a = cv::Point2f(rect_a.x, rect_a.y) + hsize_a;
+  cv::Point2f center_b = cv::Point2f(rect_b.x, rect_b.y) + hsize_b;
+
+  cv::Point2f delta = cv::Point2f(std::abs(center_a.x - center_b.x),
+                                  std::abs(center_a.y - center_b.y));
+
+  cv::Point2f dist = delta - (hsize_a + hsize_b);
+
+  if (dist.x > 0 && dist.y > 0) {
+    return cv::norm(dist);
+  }
+  return std::max(dist.x, dist.y);
 }
 
 double contour_aspect(const std::vector<cv::Point> &contour) {
@@ -28,6 +36,11 @@ double contour_aspect(const std::vector<cv::Point> &contour) {
     aspect = 1.0 / aspect;
   }
   return aspect;
+}
+
+cv::Point2f contour_center(const std::vector<cv::Point> &contour) {
+  cv::Moments moments = cv::moments(contour);
+  return cv::Point2f(moments.m10 / moments.m00, moments.m01 / moments.m00);
 }
 
 double
@@ -53,36 +66,50 @@ double contour_convexity(const std::vector<cv::Point> &contour,
   return area / cv::contourArea(hull);
 }
 
-double contour_box_distance(const std::vector<cv::Point> &contour_a,
-                            const std::vector<cv::Point> &contour_b) {
+double contour_edge_distance_box(const std::vector<cv::Point> &contour_a,
+                                 const std::vector<cv::Point> &contour_b) {
   cv::Rect rect_a = cv::boundingRect(contour_a);
   cv::Rect rect_b = cv::boundingRect(contour_b);
-  return box_distance(rect_a, rect_b);
+  return box_edge_distance(rect_a, rect_b);
 }
 
-double contour_circle_distance(const std::vector<cv::Point> &contour_a,
-                               const std::vector<cv::Point> &contour_b) {
+double contour_edge_distance_circle(const std::vector<cv::Point> &contour_a,
+                                    const std::vector<cv::Point> &contour_b) {
   cv::Point2f center_a, center_b;
   float radius_a, radius_b;
   cv::minEnclosingCircle(contour_a, center_a, radius_a);
   cv::minEnclosingCircle(contour_b, center_b, radius_b);
   return cv::norm(center_a - center_b) - (radius_a + radius_b);
 }
-double contour_distance(const std::vector<cv::Point> &contour,
-                        const cv::Point2f &pos) {
+
+double contour_edge_distance(const std::vector<cv::Point> &contour,
+                             const cv::Point2f &pos) {
   return -cv::pointPolygonTest(contour, pos, true);
 }
 
-double contour_distance(const std::vector<cv::Point> &contour_a,
-                        const std::vector<cv::Point> &contour_b) {
+double contour_edge_distance(const std::vector<cv::Point> &contour_a,
+                             const std::vector<cv::Point> &contour_b) {
   // possible to approximate with getClosestEllipsePoints
   std::vector<double> dists;
   dists.reserve(contour_b.size());
   std::transform(contour_b.begin(), contour_b.end(), std::back_inserter(dists),
                  [&contour_a](const cv::Point &p) {
-                   return contour_distance(contour_a, p);
+                   return contour_edge_distance(contour_a, p);
                  });
   return *std::min_element(dists.begin(), dists.end());
+}
+
+double contour_mean_diameter(const std::vector<cv::Point> &contour) {
+  return contour_mean_distance(contour, contour_center(contour)) * 2.0;
+}
+
+double contour_mean_distance(const std::vector<cv::Point> &contour,
+                             const cv::Point2f &pos) {
+  double sum = std::accumulate(contour.begin(), contour.end(), 0.0,
+                               [&pos](double sum, const cv::Point2f &p) {
+                                 return sum + cv::norm(pos - p);
+                               });
+  return sum / contour.size();
 }
 
 double contour_maximum_feret(const std::vector<cv::Point> &contour) {
@@ -127,8 +154,8 @@ void filter_contours(std::vector<std::vector<cv::Point>> &contours,
         }
         if (args.radius.first != args.radius.second) {
           double radius =
-              contour_distance(c, cv::Point2f(moments.m00 / moments.m10,
-                                              moments.m00 / moments.m01));
+              contour_mean_distance(c, cv::Point2f(moments.m10 / moments.m00,
+                                                   moments.m01 / moments.m00));
           if (radius < args.radius.first || radius > args.radius.second) {
             return true;
           }

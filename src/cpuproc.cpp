@@ -133,9 +133,6 @@ void preprocess_and_threshold(cv::InputArray &frame, cv::InputArray &mean,
     throw "unknown processing method ";
   }
 
-  // apply median blur for small defects
-  cv::medianBlur(processed, processed, 5);
-
   // sharpen image to reduce particle edge blur
   if (unsharp_alpha > 0.0)
     unsharp_mask(processed, processed, unsharp_alpha);
