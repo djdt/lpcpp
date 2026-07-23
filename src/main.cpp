@@ -38,7 +38,13 @@ void draw_particles_on_frame(cv::InputArray &input,
                  std::back_inserter(contours),
                  [](const Particle &p) { return p.contour(); });
 
-  cv::drawContours(output, contours, -1, color, 1.0, 8);
+  for (const auto &p : particles) {
+    const auto &contour = p.contour(p.frameCount() - 1);
+    auto center = contour_center(contour);
+    cv::drawContours(output, {contour}, -1, cv::Scalar(0, 0, 127), 1.0, 8);
+    cv::drawContours(output, {p.contour()}, -1, cv::Scalar(0, 0, 255), 1.0, 8);
+    cv::line(output, center, center + p.velocity(), cv::Scalar(255, 0, 0), 1.0);
+  }
 }
 
 bool export_particle_data(const std::filesystem::path &path,
@@ -368,7 +374,6 @@ int main(int argc, char *argv[]) {
     if (export_png)
       cpu_frame = frame.getMat(cv::ACCESS_READ);
 
-    // update_particles(particles, contours);
     std::for_each(
         contours.begin(), contours.end(),
         [&](const std::vector<cv::Point> &contour) {
