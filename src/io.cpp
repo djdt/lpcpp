@@ -40,8 +40,8 @@ void draw_particles_on_frame(cv::InputArray &input,
 
 void write_particle_header(std::ofstream &ofs) {
   ofs << "id,frame,frame_count,area,aspect,circular_equivalent_diameter,"
-         "circularity,convexity,intensity,maximum_feret,minimum_feret,mean_"
-         "diameter,perimeter,sharpness,x,y"
+         "circularity,convexity,intensity,maximum_feret,minimum_feret,maximum_"
+         "legendre,minimum_legendre,mean_diameter,perimeter,sharpness,x,y"
       << std::endl;
 }
 
@@ -51,10 +51,13 @@ void write_particle_data(const std::vector<Particle> &particles,
   for (auto it = particles.begin(); it != particles.end(); ++it) {
     const std::vector<cv::Point> &contour = it->contour();
     cv::Moments moments = cv::moments(contour);
+
     mask_for_contour(contour, mask);
 
     cv::Point center =
         cv::Point(moments.m10 / moments.m00, moments.m01 / moments.m00);
+
+    cv::Point2f legendre = legendre_axes_from_moments(moments);
 
     ofs << it->id() << ",";
     ofs << it->frame() << ",";
@@ -67,6 +70,7 @@ void write_particle_data(const std::vector<Particle> &particles,
     ofs << image_intensity(it->image(), mask) << ",";
     ofs << contour_maximum_feret(contour) << ",";
     ofs << contour_minimum_feret(contour) << ",";
+    ofs << legendre.y << "," << legendre.x << ",";
     ofs << contour_mean_distance(contour, center);
     ofs << cv::arcLength(contour, true) << ",";
     ofs << image_sharpness(it->image(), mask) << ",";

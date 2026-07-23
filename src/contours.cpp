@@ -46,21 +46,23 @@ cv::Point2f contour_center(const std::vector<cv::Point> &contour) {
 double
 contour_circular_equivalent_diameter(const std::vector<cv::Point> &contour,
                                      const double area) {
-  if (area < 0.0)
+  if (std::isnan(area))
     double area = cv::contourArea(contour);
   return std::sqrt((4.0 * area) / std::numbers::pi);
 }
 
 double contour_circularity(const std::vector<cv::Point> &contour,
                            const double area) {
-  if (area < 0.0)
+  if (std::isnan(area))
     double area = cv::contourArea(contour);
   auto perim = cv::arcLength(contour, true);
-  return std::sqrt(4.0 * std::numbers::pi * area / std::pow(perim, 2));
+  return std::sqrt(4.0 * std::numbers::pi * area / (perim * perim));
 }
 
 double contour_convexity(const std::vector<cv::Point> &contour,
                          const double area) {
+  if (std::isnan(area))
+    double area = cv::contourArea(contour);
   std::vector<cv::Point> hull;
   cv::convexHull(contour, hull);
   return area / cv::contourArea(hull);
@@ -195,4 +197,15 @@ void mask_for_contour(const std::vector<cv::Point> &contour,
   mask.setTo(0);
   cv::drawContours(mask, {contour}, 0, 255, -1, cv::LINE_8, cv::noArray(), 0,
                    -rect.tl());
+}
+
+cv::Point2f legendre_axes_from_moments(const cv::Moments &moments) {
+  double a = (moments.mu20 + moments.mu02) / moments.m00;
+  double b =
+      std::sqrt((moments.mu20 - moments.mu02) * (moments.mu20 - moments.mu02) +
+                4.0 * moments.mu11 * moments.mu11) /
+      moments.m00;
+
+  return cv::Point2f(4.0 * std::sqrt((a + b) / 2.0),
+                     4.0 * std::sqrt((a - b) / 2.0));
 }

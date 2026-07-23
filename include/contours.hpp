@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <vector>
 
 #include <opencv2/core.hpp>
@@ -21,14 +22,16 @@ double contour_aspect(const std::vector<cv::Point> &contour);
 
 cv::Point2f contour_center(const std::vector<cv::Point> &contour);
 
-double
-contour_circular_equivalent_diameter(const std::vector<cv::Point> &contour,
-                                     const double area = -1.0);
+double contour_circular_equivalent_diameter(
+    const std::vector<cv::Point> &contour,
+    const double area = std::numeric_limits<double>::quiet_NaN());
 
-double contour_circularity(const std::vector<cv::Point> &contour,
-                           const double area = -1.0);
-double contour_convexity(const std::vector<cv::Point> &contour,
-                         const double area = -1.0);
+double contour_circularity(
+    const std::vector<cv::Point> &contour,
+    const double area = std::numeric_limits<double>::quiet_NaN());
+double
+contour_convexity(const std::vector<cv::Point> &contour,
+                  const double area = std::numeric_limits<double>::quiet_NaN());
 
 double contour_edge_distance_box(const std::vector<cv::Point> &contour_a,
                                  const std::vector<cv::Point> &contour_b);
@@ -53,3 +56,5 @@ void filter_contours(std::vector<std::vector<cv::Point>> &contours,
 
 void mask_for_contour(const std::vector<cv::Point> &contour,
                       cv::InputOutputArray &mask);
+
+cv::Point2f legendre_axes_from_moments(const cv::Moments &moments);
