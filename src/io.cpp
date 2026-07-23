@@ -71,7 +71,7 @@ void write_particle_data(const std::vector<Particle> &particles,
     ofs << contour_maximum_feret(contour) << ",";
     ofs << contour_minimum_feret(contour) << ",";
     ofs << legendre.y << "," << legendre.x << ",";
-    ofs << contour_mean_distance(contour, center);
+    ofs << 2.0 * contour_mean_distance(contour, center);
     ofs << cv::arcLength(contour, true) << ",";
     ofs << image_sharpness(it->image(), mask) << ",";
     ofs << center.x << "," << center.y << "\n";
