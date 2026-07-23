@@ -280,6 +280,9 @@ int main(int argc, char *argv[]) {
       update_background(frame, acc_mean, acc_var, frame_pos);
     }
 
+    // median blue first, faster as CV_8U
+    cv::medianBlur(frame, frame, 5);
+
     std::vector<Particle> new_particles;
 
     frame.convertTo(processed, CV_32F); // ensure type correct for preproc

@@ -7,7 +7,7 @@
 #include <iterator>
 #include <numeric>
 #include <opencv2/core.hpp>
-#include <opencv2/core/types.hpp>
+#include <opencv2/geometry.hpp>
 #include <opencv2/imgproc.hpp>
 #include <vector>
 
