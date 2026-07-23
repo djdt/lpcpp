@@ -16,7 +16,13 @@ add_executable(lpcpp ${lpcpp_SRC})
 include_directories(lpcpp PUBLIC "${CMAKE_SOURCE_DIR}/include")
 
 find_package(OpenCV 5.0 REQUIRED)
-find_package(HDF5 REQUIRED COMPONENTS CXX)
 
-target_include_directories(lpcpp PRIVATE ${OpenCV_INCLUDE_DIRS} ${HDF5_INCLUDE_DIRS})
-target_link_libraries(lpcpp PRIVATE ${OpenCV_LIBS} HDF5::HDF5)
+target_include_directories(lpcpp PRIVATE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(lpcpp PRIVATE ${OpenCV_LIBS})
+
+if (ENABLE_HDF5)
+  add_compile_definitions(ENABLE_HDF5)
+  find_package(HDF5 REQUIRED COMPONENTS CXX)
+  target_include_directories(lpcpp PRIVATE ${HDF5_INCLUDE_DIRS})
+  target_link_libraries(lpcpp PRIVATE $HDF5::HDF5)
+endif()

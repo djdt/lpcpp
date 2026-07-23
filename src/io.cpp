@@ -11,7 +11,9 @@
 #include <ostream>
 #include <vector>
 
+#ifdef ENABLE_HDF5_EXPORT
 #include <H5Cpp.h>
+#endif
 
 #include <opencv2/core.hpp>
 #include <opencv2/geometry.hpp>
@@ -160,6 +162,7 @@ bool save_particle_data_vtk(const Particle &particle,
   return false;
 }
 
+#ifdef ENABLE_HDF5_EXPORT
 bool save_particle_data_hdf5(const Particle &particle,
                              const std::filesystem::path &path) {
   cv::Rect bounds = particle.boundingRect();
@@ -242,3 +245,4 @@ bool save_particle_data_hdf5(const Particle &particle,
   mask.write(mbuf.data(), H5::PredType::NATIVE_UCHAR);
   return false;
 }
+#endif

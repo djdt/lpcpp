@@ -42,10 +42,9 @@ int main(int argc, char *argv[]) {
 
   std::array<float, 3> capillary = {0.f, 0.f, 0.f};
 
-  bool draw = false;
-  bool export_images = false;
-  bool export_hdf5 = false;
   bool create_config = false;
+  bool draw = false;
+  bool export_images = false, export_hdf5 = false, export_vti = false;
 
   ParticleFrameMetric selection_metric = METRIC_CENTER_WEIGHTED_INTENSITY;
   std::map<std::string, ParticleFrameMetric> metric_map = {
@@ -98,11 +97,16 @@ int main(int argc, char *argv[]) {
 
   app.add_flag("--draw", draw, "show video and detections")
       ->configurable(false);
-  app.add_flag("--export-images", export_images,
-               "export an image of each particle")
-      ->configurable(false);
+#ifdef ENABLE_HDF5_EXPORT
   app.add_flag("--export-hdf5", export_hdf5,
                "export VTK compatible HDF5 data sets for each particle")
+      ->configurable(false);
+#endif // ENABLE_HDF5_EXPORT
+  app.add_flag("--export-images", export_images,
+               "export a PNG image for each particle")
+      ->configurable(false);
+  app.add_flag("--export-vti", export_images,
+               "export a VTK ImageDara for each particle")
       ->configurable(false);
   app.set_version_flag("--version,-v", CMAKE_PROJECT_VERSION,
                        "display version and exit");
@@ -189,12 +193,18 @@ int main(int argc, char *argv[]) {
   std::filesystem::create_directory(output_dir);
   auto image_dir = output_dir / "particle_images";
   auto hdf5_dir = output_dir / "particle_hdf5";
+  auto vtk_dir = output_dir / "particle_vti";
   if (export_images) {
     std::filesystem::create_directory(image_dir);
   }
+  if (export_vti) {
+    std::filesystem::create_directory(vtk_dir);
+  }
+#ifdef ENABLE_HDF5_EXPORT
   if (export_hdf5) {
     std::filesystem::create_directory(hdf5_dir);
   }
+#endif
 
   // just used for date
   auto start_time = std::chrono::system_clock::now();
@@ -359,7 +369,15 @@ int main(int argc, char *argv[]) {
           return 1;
       }
     }
+    if (export_vti) {
+      for (const auto &p : output_particles) {
+        auto vtk_path = vtk_dir / std::to_string(p.id()).append(".vti");
+        if (save_particle_data_vtk(p, vtk_path))
+          return 1;
+      }
+    }
 
+#ifdef ENABLE_HDF5_EXPORT
     if (export_hdf5) {
       for (const auto &p : output_particles) {
         auto h5_path = hdf5_dir / std::to_string(p.id()).append(".vtkhdf");
@@ -367,6 +385,7 @@ int main(int argc, char *argv[]) {
           return 1;
       }
     }
+#endif
 
     // update progress
     if (frame_pos % 100 == 0) {
@@ -395,7 +414,15 @@ int main(int argc, char *argv[]) {
         return 1;
     }
   }
+  if (export_vti) {
+    for (const auto &p : particles) {
+      auto vtk_path = vtk_dir / std::to_string(p.id()).append(".vti");
+      if (save_particle_data_vtk(p, vtk_path))
+        return 1;
+    }
+  }
 
+#ifdef ENABLE_HDF5_EXPORT
   if (export_hdf5) {
     for (const auto &p : particles) {
       auto h5_path = hdf5_dir / std::to_string(p.id()).append(".vtkhdf");
@@ -403,6 +430,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
   }
+#endif
 
   cv::UMat acc_out, acc_var_out;
   acc_mean.convertTo(acc_out, CV_8U);

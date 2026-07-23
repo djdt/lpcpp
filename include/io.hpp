@@ -22,5 +22,7 @@ bool save_particle_image(const Particle &particle,
 bool save_particle_data_vtk(const Particle &particle,
                             const std::filesystem::path &path);
 
+#ifdef ENABLE_HDF5_EXPORT
 bool save_particle_data_hdf5(const Particle &particle,
                              const std::filesystem::path &path);
+#endif
