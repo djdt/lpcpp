@@ -24,6 +24,55 @@
 #define CMAKE_PROJECT_VERSION "0.0.0"
 #endif
 
+void draw_particles_on_frame(cv::InputArray &input,
+                             cv::InputOutputArray &output,
+                             std::vector<Particle> &particles) {
+  output.createSameSize(input, CV_8UC3);
+  cv::cvtColor(input, output, cv::COLOR_GRAY2BGR);
+
+  auto color = cv::Scalar(0, 0, 255);
+  std::vector<std::vector<cv::Point>> contours;
+  contours.reserve(particles.size());
+
+  std::transform(particles.begin(), particles.end(),
+                 std::back_inserter(contours),
+                 [](const Particle &p) { return p.contour(); });
+
+  cv::drawContours(output, contours, -1, color, 1.0, 8);
+}
+
+bool export_particle_data(const std::filesystem::path &path,
+                          const ::std::vector<Particle> &particles,
+                          bool png = false, bool tiff = false, bool vti = false,
+                          bool hdf5 = false) {
+  if (png) {
+    std::filesystem::create_directory(path / "png");
+    for (const auto &p : particles) {
+      auto image_path = path / "png" / std::to_string(p.id()).append(".png");
+      if (save_particle_data_png(p, image_path))
+        return true;
+    }
+  }
+  if (vti) {
+    std::filesystem::create_directory(path / "vti");
+    for (const auto &p : particles) {
+      auto vtk_path = path / "vti" / std::to_string(p.id()).append(".vti");
+      if (save_particle_data_vtk(p, vtk_path))
+        return true;
+    }
+  }
+  if (hdf5) {
+    std::filesystem::create_directory(path / "hdf5");
+    for (const auto &p : particles) {
+      auto hdf5_path = path / "hdf5" / std::to_string(p.id()).append(".vtkhdf");
+      if (save_particle_data_hdf5(p, hdf5_path))
+        return true;
+    }
+  }
+
+  return false;
+}
+
 int main(int argc, char *argv[]) {
 
   CLI::App app;
@@ -44,7 +93,7 @@ int main(int argc, char *argv[]) {
 
   bool create_config = false;
   bool draw = false;
-  bool export_images = false, export_hdf5 = false, export_vti = false;
+  bool export_png = false, export_hdf5 = false, export_vti = false;
 
   ParticleFrameMetric selection_metric = METRIC_CENTER_WEIGHTED_INTENSITY;
   std::map<std::string, ParticleFrameMetric> metric_map = {
@@ -102,14 +151,12 @@ int main(int argc, char *argv[]) {
                "export VTK compatible HDF5 data sets for each particle")
       ->configurable(false);
 #endif // ENABLE_HDF5_EXPORT
-  app.add_flag("--export-images", export_images,
+  app.add_flag("--export-png", export_png,
                "export a PNG image for each particle")
       ->configurable(false);
   app.add_flag("--export-vti", export_vti,
                "export a VTK ImageDara for each particle")
       ->configurable(false);
-  app.set_version_flag("--version,-v", CMAKE_PROJECT_VERSION,
-                       "display version and exit");
 
   auto filter_cmd =
       app.add_subcommand("filter", "options for filtering particles");
@@ -135,7 +182,7 @@ int main(int argc, char *argv[]) {
       ->check(CLI::NonNegativeNumber);
   filter_cmd
       ->add_option("--radius", contour_filter_args.radius,
-                   "allowed particle radius")
+                   "allowed particle diameter")
       ->check(CLI::NonNegativeNumber);
   filter_cmd
       ->add_option("--sharpness", contour_filter_args.sharpness,
@@ -153,6 +200,12 @@ int main(int argc, char *argv[]) {
       ->configurable(false)
       ->callback_priority(CLI::CallbackPriority::First);
   app.set_config("--config", std::string(), "read options from a config file");
+  app.set_version_flag("--version,-v", CMAKE_PROJECT_VERSION,
+                       "display version and exit");
+
+  //
+  // parse the arguments
+  //
 
   try {
     app.parse(argc, argv);
@@ -160,6 +213,7 @@ int main(int argc, char *argv[]) {
     return app.exit(e);
   }
 
+  // early exit if create config is used
   if (create_config) {
     std::ofstream cfs(CLI::to_path(inname));
     std::cout << "deault config file created at " << inname << ", exiting"
@@ -170,60 +224,36 @@ int main(int argc, char *argv[]) {
 
   // Convert some of the parsed options
   std::filesystem::path path(CLI::to_path(inname));
-  std::filesystem::path output_dir;
-  if (outname.empty()) {
+  std::filesystem::path output_dir(CLI::to_path(outname));
+  if (output_dir.empty())
     output_dir = path.parent_path() / "processed";
-  } else {
-    output_dir = CLI::to_path(outname);
-  }
 
-  // create capture and read some props
+  //
+  // open video capture and read some props
+  //
+
   auto cap = cv::VideoCapture(path.string(), cv::CAP_FFMPEG);
   if (!cap.set(cv::CAP_PROP_CONVERT_RGB, 0)) {
     std::cerr << "cannot read as greyscale" << std::endl;
     return 1;
   }
-
   int width = cap.get(cv::CAP_PROP_FRAME_WIDTH);
   int height = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
   int frame_count = cap.get(cv::CAP_PROP_FRAME_COUNT);
 
-  // create output directory
+  // info message
+  std::cout << "Processsing " << path << std::endl;
+  std::cout << "\tframes = " << frame_count << std::endl;
+  std::cout << "\tsize = " << width << " x " << height << std::endl;
 
-  std::filesystem::create_directory(output_dir);
-  auto image_dir = output_dir / "particle_images";
-  auto hdf5_dir = output_dir / "particle_hdf5";
-  auto vtk_dir = output_dir / "particle_vti";
-  if (export_images) {
-    std::filesystem::create_directory(image_dir);
-  }
-  if (export_vti) {
-    std::filesystem::create_directory(vtk_dir);
-  }
-#ifdef ENABLE_HDF5_EXPORT
-  if (export_hdf5) {
-    std::filesystem::create_directory(hdf5_dir);
-  }
-#endif
-
-  // just used for date
-  auto start_time = std::chrono::system_clock::now();
-
-  std::ofstream results_output(
-      output_dir /
-          (std::format("{0:%H}_{0:%M}_{0:%OS}", start_time) + "_particles.csv"),
-      std::ios::out);
-  write_particle_header(results_output);
+  //
+  // detect capillary and mask off bounds
+  //
 
   // load a frame and find the ROI
   cv::UMat frame, capillary_mask;
   cap.read(frame);
   capillary_mask = cv::UMat::zeros(frame.rows, frame.cols, CV_8U);
-
-  std::cout << "Processsing " << path << std::endl;
-
-  std::cout << "\tframes = " << frame_count << std::endl;
-  std::cout << "\tsize = " << width << " x " << height << std::endl;
 
   // If radius is zero, try to find from image
   if (capillary[2] == 0.f) {
@@ -242,6 +272,10 @@ int main(int argc, char *argv[]) {
   cv::circle(capillary_mask, cv::Point(capillary[0], capillary[1]),
              capillary[2], 255, -1);
 
+  //
+  // initialise the background and variance accumulated arrays
+  //
+
   // init the accumulated mean and variance
   cv::UMat acc_mean;
   cv::UMat acc_var = cv::UMat::zeros(frame.rows, frame.cols, CV_32F);
@@ -256,55 +290,83 @@ int main(int argc, char *argv[]) {
     cv::namedWindow("frame", cv::WINDOW_NORMAL);
   };
 
+  //
+  // create output directories and files
+  //
+
+  // create output directory
+  std::filesystem::create_directory(output_dir);
+  // open results file and populate with header
+  std::ofstream ofs_results(
+      output_dir /
+      (std::format("{0:%H}_{0:%M}_{0:%OS}", std::chrono::system_clock::now()) +
+       "_particles.csv"));
+  write_particle_properties_header(ofs_results);
+
+  //
+  // start the main loop
+  //
+
+  cv::UMat processed, threshold;
+  std::vector<Particle> particles;
+  int particle_count = 0;
+
+  auto start_time = std::chrono::system_clock::now();
+  // time interval for next update of progress
+  auto update_time = start_time + std::chrono::seconds(1);
+
   // reset the video
   int frame_pos = 0;
   cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
 
-  int particle_count = 0;
-  std::vector<Particle> particles;
-
-  cv::UMat processed, threshold;
-
-  start_time = std::chrono::system_clock::now();
-  auto update_time = start_time + std::chrono::seconds(1);
-
   while (frame_pos < frame_count) {
+    // read frame and exit if end of video
     cap.read(frame);
-
-    // read in a new frame
     if (frame.empty()) {
       break;
     }
 
     // update the background accumulated mean and variance,
-    // if on an unread frame
+    // if on an frame not processed during init
     if (frame_pos > background_frames) {
       update_background(frame, acc_mean, acc_var, frame_pos);
     }
+
+    //
+    // preprocessing and threshold
+    //
 
     // median blur first, faster as CV_8U
     cv::medianBlur(frame, frame, 5);
     frame.convertTo(processed, CV_32F); // ensure type correct for preproc
 
-    std::vector<Particle> new_particles;
-
+    // main processing, extract the difference from the mean, apply unsharp mask
+    // then get threshold where greater than then z * std
     preprocess_and_threshold(processed, acc_mean, acc_var, processed, threshold,
                              zscore, unsharp_alpha, preprocess_mode);
-
+    // mask off the capillary edges
     cv::bitwise_and(threshold, capillary_mask, threshold);
-    // get contours
+
+    //
+    // find and filter contours
+    //
+
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(threshold, contours, cv::RETR_EXTERNAL,
                      cv::CHAIN_APPROX_SIMPLE);
+
+    filter_contours(contours, processed, contour_filter_args);
+
+    //
+    // update particles with new contours
+    //
 
     // move the diff image to the CPU, since it gets cropped and is then faster
     cv::Mat cpu_proc = processed.getMat(cv::ACCESS_READ);
     // only move frame image if we are exporting, expensive operation
     cv::Mat cpu_frame;
-    if (export_images)
+    if (export_png)
       cpu_frame = frame.getMat(cv::ACCESS_READ);
-
-    filter_contours(contours, cpu_proc, contour_filter_args);
 
     // update_particles(particles, contours);
     std::for_each(
@@ -339,7 +401,10 @@ int main(int argc, char *argv[]) {
           }
         });
 
+    //
     // remove untrakced (old) particles from the vector
+    //
+
     auto pivot = std::stable_partition(
         particles.begin(), particles.end(), [&](const Particle &p) {
           return frame_pos - p.lastFrame() < particle_frames;
@@ -349,7 +414,10 @@ int main(int argc, char *argv[]) {
         std::make_move_iterator(particles.end()));
     particles.erase(pivot, particles.end());
 
-    // create a color image and draw the contuors
+    //
+    // draw a color image and contuors
+    //
+
     if (draw) {
       cv::UMat rgb_frame;
       draw_particles_on_frame(frame, rgb_frame, particles);
@@ -364,37 +432,16 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // output the particles
-    write_particle_data(output_particles, results_output);
+    //
+    // output
+    //
 
-    if (export_images) {
-      for (const auto &p : output_particles) {
-        auto image_path = image_dir / std::to_string(p.id()).append(".png");
-        auto contr_path = image_dir / std::to_string(p.id()).append(".dat");
-        save_particle_contours(p, contr_path);
-        if (save_particle_image(p, image_path))
-          return 1;
-      }
-    }
-    if (export_vti) {
-      for (const auto &p : output_particles) {
-        auto vtk_path = vtk_dir / std::to_string(p.id()).append(".vti");
-        if (save_particle_data_vtk(p, vtk_path))
-          return 1;
-      }
-    }
+    write_particle_properties(output_particles, ofs_results);
+    export_particle_data(output_dir, output_particles, export_png);
 
-#ifdef ENABLE_HDF5_EXPORT
-    if (export_hdf5) {
-      for (const auto &p : output_particles) {
-        auto h5_path = hdf5_dir / std::to_string(p.id()).append(".vtkhdf");
-        if (save_particle_data_hdf5(p, h5_path))
-          return 1;
-      }
-    }
-#endif
-
+    //
     // update progress
+    //
 
     auto frame_time = std::chrono::system_clock::now();
     if (frame_time > update_time || frame_pos == frame_count) {
@@ -415,39 +462,23 @@ int main(int argc, char *argv[]) {
 
     frame_pos++;
   } // while
-  // export any remaining particles
-  write_particle_data(particles, results_output);
 
-  if (export_images) {
-    for (const auto &p : particles) {
-      auto image_path = image_dir / std::to_string(p.id()).append(".png");
-      if (save_particle_image(p, image_path))
-        return 1;
-    }
-  }
-  if (export_vti) {
-    for (const auto &p : particles) {
-      auto vtk_path = vtk_dir / std::to_string(p.id()).append(".vti");
-      if (save_particle_data_vtk(p, vtk_path))
-        return 1;
-    }
-  }
+  //
+  // export any remaining particles and images
+  //
 
-#ifdef ENABLE_HDF5_EXPORT
-  if (export_hdf5) {
-    for (const auto &p : particles) {
-      auto h5_path = hdf5_dir / std::to_string(p.id()).append(".vtkhdf");
-      if (save_particle_data_hdf5(p, h5_path))
-        return 1;
-    }
-  }
-#endif
+  write_particle_properties(particles, ofs_results);
+  export_particle_data(output_dir, particles, export_png);
 
   cv::UMat acc_out, acc_var_out;
   acc_mean.convertTo(acc_out, CV_8U);
   cv::imwrite((output_dir / "background_mean.png").string(), acc_out);
   acc_var.convertTo(acc_var_out, CV_8U);
   cv::imwrite((output_dir / "background_var.png").string(), acc_var_out);
+
+  //
+  // print total time
+  //
 
   auto total_duration = std::chrono::duration<double>(
       std::chrono::system_clock::now() - start_time);

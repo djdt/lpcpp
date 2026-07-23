@@ -125,7 +125,7 @@ double contour_minimum_feret(const std::vector<cv::Point> &contour) {
 }
 
 void filter_contours(std::vector<std::vector<cv::Point>> &contours,
-                     const cv::Mat &frame, const filter_args &args) {
+                     const cv::UMat &frame, const filter_args &args) {
   auto it = std::remove_if(
       contours.begin(), contours.end(), [=](const std::vector<cv::Point> &c) {
         cv::Moments moments = cv::moments(c);
