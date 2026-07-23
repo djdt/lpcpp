@@ -38,6 +38,11 @@ double contour_aspect(const std::vector<cv::Point> &contour) {
   return aspect;
 }
 
+cv::Point2f contour_center(const std::vector<cv::Point> &contour) {
+  cv::Moments moments = cv::moments(contour);
+  return cv::Point2f(moments.m10 / moments.m00, moments.m01 / moments.m00);
+}
+
 double
 contour_circular_equivalent_diameter(const std::vector<cv::Point> &contour,
                                      const double area) {
@@ -59,11 +64,6 @@ double contour_convexity(const std::vector<cv::Point> &contour,
   std::vector<cv::Point> hull;
   cv::convexHull(contour, hull);
   return area / cv::contourArea(hull);
-}
-
-cv::Point2f contour_center(const std::vector<cv::Point> &contour) {
-  cv::Moments moments = cv::moments(contour);
-  return cv::Point2f(moments.m10 / moments.m00, moments.m01 / moments.m00);
 }
 
 double contour_edge_distance_box(const std::vector<cv::Point> &contour_a,
