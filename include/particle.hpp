@@ -45,6 +45,8 @@ public:
   const cv::Rect boundingRect() const;
   void update(const int frame_number, const std::vector<cv::Point> &contour,
               const cv::Mat &image, const cv::Mat &raw_image);
+
+  cv::Point2f velocity() const;
 };
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,
