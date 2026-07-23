@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
   std::string inname, outname;
 
   int background_frames = 1000;
-  int particle_frames = 50;
+  int particle_frames = 10;
 
   double particle_distance = 5.0;
   double zscore = 3.0;
