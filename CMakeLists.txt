@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.27)
 project(lpcpp
-    VERSION 0.3.0
+    VERSION 0.4.0
     LANGUAGES CXX
 )
 set(CMAKE_BUILD_TYPE Release)
@@ -20,9 +20,11 @@ find_package(OpenCV 5.0 REQUIRED)
 target_include_directories(lpcpp PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(lpcpp PRIVATE ${OpenCV_LIBS})
 
-if (ENABLE_HDF5)
-  add_compile_definitions(ENABLE_HDF5)
-  find_package(HDF5 REQUIRED COMPONENTS CXX)
+find_package(HDF5 OPTIONAL COMPONENTS CXX)
+if (HDF5_FOUND)
+  add_compile_definitions(ENABLE_HDF5_EXPORT)
   target_include_directories(lpcpp PRIVATE ${HDF5_INCLUDE_DIRS})
-  target_link_libraries(lpcpp PRIVATE $HDF5::HDF5)
+  target_link_libraries(lpcpp PRIVATE HDF5::HDF5)
+else()
+  message("HDF5 not found, disabling HDF5 export")
 endif()
