@@ -280,12 +280,12 @@ int main(int argc, char *argv[]) {
       update_background(frame, acc_mean, acc_var, frame_pos);
     }
 
-    // median blue first, faster as CV_8U
+    // median blur first, faster as CV_8U
     cv::medianBlur(frame, frame, 5);
+    frame.convertTo(processed, CV_32F); // ensure type correct for preproc
 
     std::vector<Particle> new_particles;
 
-    frame.convertTo(processed, CV_32F); // ensure type correct for preproc
     preprocess_and_threshold(processed, acc_mean, acc_var, processed, threshold,
                              zscore, unsharp_alpha, preprocess_mode);
 
