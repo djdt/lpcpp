@@ -27,22 +27,67 @@ If building on Windows using Visual Studio then OpenCV is expected at ```C:\open
    ```
 
 ## Usage
-To run lpcpp pass a inline microscopy file and any options ```lpcpp <FILE> [options]```.
+To run lpcpp pass a inline microscopy file and any options ```lpcpp [OPTIONS] file [SUBCOMMANDS]```.
 
 The following options are available:
 ```
---background-frames, number of background frames used to determine initial mean and std, default = 1000
---particle-frames, number of frames to track particles after last detection, default = 50
---particle-distance, minimum distance between particles, default = 3
---zscore, number of std above the background mean to threshold, default = 3
---unsharp, apply an unsharp mask at this alpha, default = 1
---draw, show video and detections, default = false
---output, output directory for processed data
---export-images, export images of particles, default = false
---config, path to filter config, with lines: '<key> <min> <max>'
-        valid keys are: 'area', 'aspect', circularity', 'convexity', 'intensity', 'radius', 'sharpness'.
-        If no file exists, a default config file is created.
+lpcpp [OPTIONS] file [SUBCOMMANDS]
+
+
+POSITIONALS:
+  file TEXT:FILE REQUIRED     path to the captured OIM video
+
+OPTIONS:
+  -h,     --help              
+  -o,     --output TEXT:(PATH(non-existing)) OR (DIR) 
+                              specify the output directory, defaults to 'processed'
+          --selection-metric ENUM:value in {averageIntensity->0,centralIntensity->1,sharpness->2} OR {0,1,2} [1]  
+                              method of selecting the particle frame for processing
+          --detection-mode ENUM:value in {absolute->2,dark->1,light->0} OR {2,1,0} [1]  
+                              method of thresholding differences from the background
+          --background INT:POSITIVE [1000]  
+                              number of background frames used to determine initial mean and
+                              std
+          --track INT:POSITIVE [50]  
+                              number of frames to track particles after last detection
+          --distance FLOAT:POSITIVE [5]  
+                              minimum distance between particles
+          --zscore FLOAT:POSITIVE [3]  
+                              number of std above the background mean to threshold
+          --unsharp FLOAT:NONNEGATIVE [1]  
+                              alpha value of the unsharp mask
+          --capillary [FLOAT,FLOAT,FLOAT]:NONNEGATIVE [[0,0,0]]  
+                              capillary position and radius <x> <y> <radius>. If 0, try to read
+                              from video
+          --draw              show video and detections
+          --export-images     export an image of each particle
+          --export-hdf5       export VTK compatible HDF5 data sets for each particle
+  -v,     --version           display version and exit
+          --create-config     write default values to a new config file at 'file'
+          --config            read options from a config file
+
+SUBCOMMANDS:
+filter
+  options for filtering particles
+  
+  
+OPTIONS:
+          --area [FLOAT,FLOAT]:NONNEGATIVE [[5,10000]]  
+                              allowed particle area
+          --aspect [FLOAT,FLOAT]:FLOAT in [0 - 1] [[0.5,1]]  
+                              allowed particle aspect ratio
+          --circularity [FLOAT,FLOAT]:FLOAT in [0 - 1] [[0.5,1]]  
+                              allowed particle circularity
+          --convexity [FLOAT,FLOAT]:FLOAT in [0 - 1] [[0.5,1]]  
+                              allowed particle convexity
+          --intensity [FLOAT,FLOAT]:NONNEGATIVE [[1000,1e+06]]  
+                              allowed particle intensity (darkness)
+          --radius [FLOAT,FLOAT]:NONNEGATIVE [[1,11000]]  
+                              allowed particle radius
+          --sharpness [FLOAT,FLOAT]:NONNEGATIVE [[0,0]]  
+                              allowed particle sharpness
 ```
+Filter options can be passed as ```--filter.area 0 100``` etc.
 
 ## Python Explorer
 
