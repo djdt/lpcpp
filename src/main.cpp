@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
   app.add_flag("--export-images", export_images,
                "export a PNG image for each particle")
       ->configurable(false);
-  app.add_flag("--export-vti", export_images,
+  app.add_flag("--export-vti", export_vti,
                "export a VTK ImageDara for each particle")
       ->configurable(false);
   app.set_version_flag("--version,-v", CMAKE_PROJECT_VERSION,

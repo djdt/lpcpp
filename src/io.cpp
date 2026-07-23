@@ -105,7 +105,7 @@ bool save_particle_data_vtk(const Particle &particle,
 
   ofs << "\t\t\t<CellData Scalars=\"Processed\">\n";
   ofs << "\t\t\t\t<DataArray type=\"Float32\" Name=\"Processed\" "
-         "format=\"ascii\">\n\t\t\t\t\t";
+         "format=\"ascii\">\n";
 
   for (size_t z = 0; z < particle.frameCount(); ++z) {
     const cv::Mat &image = particle.image(z);
@@ -127,11 +127,8 @@ bool save_particle_data_vtk(const Particle &particle,
   }
 
   ofs << "\n\t\t\t\t</DataArray>\n";
-  ofs << "\t\t\t</CellData>\n";
-
-  ofs << "\t\t\t<CellData Scalars=\"Mask\">\n";
-  ofs << "\t\t\t\t<DataArray type=\"Float32\" Name=\"Mask\" "
-         "format=\"ascii\">\n\t\t\t\t\t";
+  ofs << "\t\t\t\t<DataArray type=\"UInt8\" Name=\"Mask\" "
+         "format=\"ascii\">\n";
 
   for (size_t z = 0; z < particle.frameCount(); ++z) {
     cv::Mat mask;
@@ -144,7 +141,7 @@ bool save_particle_data_vtk(const Particle &particle,
         size_t sx = x - offset.x;
         size_t sy = y - offset.y;
         if (sx >= 0 && sx < mask.cols && sy >= 0 && sy < mask.rows) {
-          ofs << mask.at<float>(sy, sx);
+          ofs << static_cast<int>(mask.at<uchar>(sy, sx));
         } else {
           ofs << "0";
         }
