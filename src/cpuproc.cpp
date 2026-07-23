@@ -78,6 +78,7 @@ bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
   cv::UMat frame;
 
   auto start_time = std::chrono::system_clock::now();
+  auto update_time = start_time + std::chrono::seconds(1);
 
   while (frame_pos++ < frame_count) {
     cap.read(frame);
@@ -90,17 +91,20 @@ bool init_background(cv::VideoCapture &cap, cv::InputOutputArray &mean,
     // update the background accumulated mean and variance
     update_background(frame, mean, var, frame_pos);
 
+    auto frame_time = std::chrono::system_clock::now();
     // update progress
-    if (frame_pos % 100 == 0) {
+    if (frame_time > update_time || frame_pos == frame_count) {
       double fps;
       auto remaining =
-          get_remaining_time(start_time, frame_pos, frame_pos, fps);
+          get_remaining_time(start_time, frame_time, frame_pos, frame_pos, fps);
 
       std::cout << "\t...processing background :: frame " << frame_pos << "/"
                 << frame_count << " @ ";
       std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
       std::cout << std::format("{:%T}", remaining) << " remaining.\r"
                 << std::flush;
+
+      update_time = frame_time + std::chrono::seconds(1);
     }
   }
   std::cout << std::endl;
