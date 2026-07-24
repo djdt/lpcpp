@@ -24,7 +24,7 @@ private:
   std::vector<cv::Mat> _images;
   std::vector<cv::Mat> _raw_images;
   std::vector<std::vector<cv::Point>> _contours;
-  std::vector<cv::Moments> _contour_moments;
+  // std::vector<cv::Moments> _contour_moments;
 
   cv::KalmanFilter _kalman; // position tracking
 

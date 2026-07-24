@@ -21,7 +21,7 @@ Particle::Particle(const int frame_number,
 
   _frames.push_back(frame_number);
   _contours.push_back(contour);
-  _contour_moments.push_back(cv::moments(contour));
+  // _contour_moments.push_back(cv::moments(contour));
 
   _images.push_back(image(rect).clone());
   if (!raw_image.empty()) {
@@ -41,11 +41,10 @@ Particle::Particle(const int frame_number,
   cv::setIdentity(_kalman.measurementNoiseCov, 1e-2);
   cv::setIdentity(_kalman.errorCovPost, 1.f);
 
+  cv::Moments moments = cv::moments(contour);
   _kalman.statePost = cv::Mat::zeros(6, 1, CV_32F);
-  _kalman.statePost.at<float>(0) =
-      _contour_moments.back().m10 / _contour_moments.back().m00;
-  _kalman.statePost.at<float>(1) =
-      _contour_moments.back().m01 / _contour_moments.back().m00;
+  _kalman.statePost.at<float>(0) = moments.m10 / moments.m00;
+  _kalman.statePost.at<float>(1) = moments.m02 / moments.m00;
 
   _metric = calculate_selection_metric(contour, _images.back(), _metric_method);
 };
@@ -72,11 +71,11 @@ const cv::Mat &Particle::image(const int index) const {
     return _images[_index];
   return _images[index];
 }
-const cv::Moments &Particle::moments(const int index) const {
-  if (index < 0)
-    return _contour_moments[_index];
-  return _contour_moments[index];
-}
+// const cv::Moments &Particle::moments(const int index) const {
+//   if (index < 0)
+//     return _contour_moments[_index];
+//   return _contour_moments[index];
+// }
 const cv::Mat &Particle::rawImage(const int index) const {
   if (index < 0)
     return _raw_images[_index];
@@ -110,6 +109,7 @@ void Particle::update(const int frame_number,
   } else {
     _contours.push_back(contour);
   }
+
   cv::Rect rect = cv::boundingRect(_contours.back());
   rect &= cv::Rect(0, 0, image.cols, image.rows);
 
