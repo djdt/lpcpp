@@ -1,8 +1,10 @@
 #pragma once
 
+#include <opencv2/core/types.hpp>
 #include <vector>
 
 #include <opencv2/core.hpp>
+#include <opencv2/video/tracking.hpp>
 
 enum ParticleFrameMetric {
   METRIC_AVERAGE_INTENSITY,
@@ -22,6 +24,8 @@ private:
   std::vector<cv::Mat> _raw_images;
   std::vector<std::vector<cv::Point>> _contours;
   std::vector<int> _frames;
+
+  cv::KalmanFilter _kalman;
 
   size_t _index;
 
@@ -46,7 +50,8 @@ public:
   void update(const int frame_number, const std::vector<cv::Point> &contour,
               const cv::Mat &image, const cv::Mat &raw_image);
 
-  cv::Point2f velocity() const;
+  cv::Point2f position() const;
+  cv::Point2f predictedPosition(const int frame) const;
 };
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,

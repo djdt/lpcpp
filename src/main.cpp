@@ -25,7 +25,7 @@
 #endif
 
 void draw_particles_on_frame(cv::InputArray &input,
-                             cv::InputOutputArray &output,
+                             cv::InputOutputArray &output, const int frame_pos,
                              std::vector<Particle> &particles) {
   output.createSameSize(input, CV_8UC3);
   cv::cvtColor(input, output, cv::COLOR_GRAY2BGR);
@@ -40,10 +40,11 @@ void draw_particles_on_frame(cv::InputArray &input,
 
   for (const auto &p : particles) {
     const auto &contour = p.contour(p.frameCount() - 1);
-    auto center = contour_center(contour);
+    // auto center = contour_center(contour);
     cv::drawContours(output, {contour}, -1, cv::Scalar(0, 0, 127), 1.0, 8);
     cv::drawContours(output, {p.contour()}, -1, cv::Scalar(0, 0, 255), 1.0, 8);
-    cv::line(output, center, center + p.velocity(), cv::Scalar(255, 0, 0), 1.0);
+    cv::line(output, p.position(), p.predictedPosition(frame_pos),
+             cv::Scalar(255, 0, 0), 1.0);
   }
 }
 
@@ -425,7 +426,7 @@ int main(int argc, char *argv[]) {
 
     if (draw) {
       cv::UMat rgb_frame;
-      draw_particles_on_frame(frame, rgb_frame, particles);
+      draw_particles_on_frame(frame, rgb_frame, frame_pos, particles);
       // draw capilary bounds
       cv::circle(rgb_frame, cv::Point(capillary[0], capillary[1]), capillary[2],
                  cv::Scalar(0, 255, 0), 1);
