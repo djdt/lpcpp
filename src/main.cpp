@@ -43,7 +43,7 @@ void draw_particles_on_frame(cv::InputArray &input,
     // auto center = contour_center(contour);
     cv::drawContours(output, {contour}, -1, cv::Scalar(0, 0, 127), 1.0, 8);
     cv::drawContours(output, {p.contour()}, -1, cv::Scalar(0, 0, 255), 1.0, 8);
-    cv::line(output, p.position(), p.predictedPosition(frame_pos),
+    cv::line(output, p.position(), p.predictedPosition(frame_pos + 1),
              cv::Scalar(255, 0, 0), 1.0);
   }
 }

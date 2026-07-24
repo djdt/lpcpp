@@ -3,9 +3,10 @@
 #include "contours.hpp"
 #include "cpuproc.hpp"
 
-#include <opencv2/core/hal/interface.h>
-#include <opencv2/core/types.hpp>
+#include <iostream>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/geometry/2d.hpp>
+#include <ostream>
 #include <vector>
 
 #include <opencv2/core.hpp>
@@ -27,7 +28,7 @@ Particle::Particle(const int frame_number,
     _raw_images.push_back(raw_image(rect).clone());
   }
 
-  cv::Moments _moments = cv::moments(_contours);
+  cv::Moments _moments = cv::moments(_contours.back());
 
   _kalman.init(6, 2);
   static float t_vals[6][6] = {
@@ -47,6 +48,8 @@ Particle::Particle(const int frame_number,
   _kalman.statePost.at<float>(1) = _moments.m01 / _moments.m00;
   _kalman.statePost.at<float>(2) = 0.f;
   _kalman.statePost.at<float>(3) = 0.f;
+  _kalman.statePost.at<float>(5) = 0.f;
+  _kalman.statePost.at<float>(6) = 0.f;
 
   _metric = calculate_selection_metric(contour, _images.back(), _metric_method);
 };
@@ -119,18 +122,33 @@ void Particle::update(const int frame_number,
     _index = _frames.size() - 1;
   }
 
-  _kalman.correct(cv::Mat(contour_center(_contours.back())));
+  cv::Point2f center = contour_center(_contours.back());
+  cv::Mat measurement = cv::Mat(2, 1, CV_32F);
+  measurement.at<float>(0) = center.x;
+  measurement.at<float>(1) = center.y;
+
+  // TODO : need to complete updating of state here?
+  _kalman.correct(measurement);
 }
 
 cv::Point2f Particle::position() const {
-  return cv::Point2f(_kalman.statePost);
+  auto p = cv::Point2f(_kalman.statePost.at<float>(0),
+                       _kalman.statePost.at<float>(1));
+  return p;
 }
 
 cv::Point2f Particle::predictedPosition(const int frame) const {
   cv::Mat prediction = _kalman.statePost.clone();
-  for (int i = _frames.back(); i < frame; ++i)
-    prediction = _kalman.transitionMatrix * prediction;
-  return cv::Point2f(prediction.at<float>(0), prediction.at<float>(1));
+  int tf = 0;
+  for (int i = _frames.back(); i < frame; ++i) {
+    tf++;
+    cv::gemm(_kalman.transitionMatrix, prediction, 1.0, cv::noArray(), 0.0,
+             prediction);
+  }
+  auto p = cv::Point2f(prediction.at<float>(0), prediction.at<float>(1));
+  std::cout << position() << " -> " << p << " " << frameCount() << " " << tf
+            << std::endl;
+  return p;
 }
 
 // cv::Point2f Particle::velocity() const {
