@@ -20,12 +20,13 @@ private:
   ParticleFrameMetric _metric_method;
   double _metric;
 
+  std::vector<int> _frames;
   std::vector<cv::Mat> _images;
   std::vector<cv::Mat> _raw_images;
   std::vector<std::vector<cv::Point>> _contours;
-  std::vector<int> _frames;
+  std::vector<cv::Moments> _contour_moments;
 
-  cv::KalmanFilter _kalman;
+  cv::KalmanFilter _kalman; // position tracking
 
   size_t _index;
 
@@ -41,9 +42,10 @@ public:
   const int lastFrame() const;
 
   // current index access
-  const int frame(const int index = -1) const;
   const std::vector<cv::Point> &contour(const int index = -1) const;
+  const int frame(const int index = -1) const;
   const cv::Mat &image(const int index = -1) const;
+  const cv::Moments &moments(const int index = -1) const;
   const cv::Mat &rawImage(const int index = -1) const;
 
   const cv::Rect boundingRect() const;
@@ -51,6 +53,7 @@ public:
               const cv::Mat &image, const cv::Mat &raw_image);
 
   cv::Point2f position() const;
+  cv::Point2f velocity() const;
   cv::Point2f predictedPosition(const int frame) const;
 };
 
