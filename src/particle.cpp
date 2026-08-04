@@ -44,7 +44,7 @@ Particle::Particle(const int frame_number,
   cv::Moments moments = cv::moments(contour);
   _kalman.statePost = cv::Mat::zeros(6, 1, CV_32F);
   _kalman.statePost.at<float>(0) = moments.m10 / moments.m00;
-  _kalman.statePost.at<float>(1) = moments.m02 / moments.m00;
+  _kalman.statePost.at<float>(1) = moments.m01 / moments.m00;
 
   _metric = calculate_selection_metric(contour, _images.back(), _metric_method);
 };
@@ -146,9 +146,7 @@ cv::Point2f Particle::velocity() const {
 
 cv::Point2f Particle::predictedPosition(const int frame) const {
   cv::Mat prediction = _kalman.statePost.clone();
-  int tf = 0;
   for (int i = _frames.back(); i < frame; ++i) {
-    tf++;
     cv::gemm(_kalman.transitionMatrix, prediction, 1.0, cv::noArray(), 0.0,
              prediction);
   }
