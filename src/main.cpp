@@ -20,6 +20,8 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include "tracy/Tracy.hpp"
+
 #ifndef CMAKE_PROJECT_VERSION
 #define CMAKE_PROJECT_VERSION "0.0.0"
 #endif
@@ -90,7 +92,6 @@ bool export_particle_data(const std::filesystem::path &path,
 }
 
 int main(int argc, char *argv[]) {
-
   CLI::App app;
   app.option_defaults()->always_capture_default();
   app.set_help_flag("");
@@ -339,6 +340,9 @@ int main(int argc, char *argv[]) {
   cap.set(cv::CAP_PROP_POS_FRAMES, frame_pos);
 
   while (frame_pos < frame_count) {
+    FrameMarkStart(loop);
+    ZoneNamed("main loop", true);
+
     // read frame and exit if end of video
     cap.read(frame);
     if (frame.empty()) {

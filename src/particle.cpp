@@ -28,24 +28,24 @@ Particle::Particle(const int frame_number,
     _raw_images.push_back(raw_image(rect).clone());
   }
 
-  _kalman.init(4, 2);
-
-  static float t_vals[4][4] = {{1.f, 0.f, 1.f, 0.f},
-                               {0.f, 1.f, 0.f, 1.f},
-                               {0.f, 0.f, 1.f, 0.f},
-                               {0.f, 0.f, 0.f, 1.f}};
-
-  _kalman.transitionMatrix = cv::Mat(4, 4, CV_32F, t_vals);
-  _kalman.measurementMatrix = cv::Mat::eye(2, 4, CV_32F);
-
-  cv::setIdentity(_kalman.processNoiseCov, 1e-3);
-  cv::setIdentity(_kalman.measurementNoiseCov, 1e-2);
-  cv::setIdentity(_kalman.errorCovPost, 1.f);
-
-  cv::Moments moments = cv::moments(contour);
-  _kalman.statePost = cv::Mat::zeros(4, 1, CV_32F);
-  _kalman.statePost.at<float>(0) = moments.m10 / moments.m00;
-  _kalman.statePost.at<float>(1) = moments.m01 / moments.m00;
+  // _kalman.init(4, 2);
+  //
+  // static float t_vals[4][4] = {{1.f, 0.f, 1.f, 0.f},
+  //                              {0.f, 1.f, 0.f, 1.f},
+  //                              {0.f, 0.f, 1.f, 0.f},
+  //                              {0.f, 0.f, 0.f, 1.f}};
+  //
+  // _kalman.transitionMatrix = cv::Mat(4, 4, CV_32F, t_vals);
+  // _kalman.measurementMatrix = cv::Mat::eye(2, 4, CV_32F);
+  //
+  // cv::setIdentity(_kalman.processNoiseCov, 1e-3);
+  // cv::setIdentity(_kalman.measurementNoiseCov, 1e-2);
+  // cv::setIdentity(_kalman.errorCovPost, 1.f);
+  //
+  // cv::Moments moments = cv::moments(contour);
+  // _kalman.statePost = cv::Mat::zeros(4, 1, CV_32F);
+  // _kalman.statePost.at<float>(0) = moments.m10 / moments.m00;
+  // _kalman.statePost.at<float>(1) = moments.m01 / moments.m00;
 
   _metric = calculate_selection_metric(contour, _images.back(), _metric_method);
 };
@@ -130,13 +130,13 @@ void Particle::update(const int frame_number,
     _index = _frames.size() - 1;
   }
 
-  cv::Point2f center = contour_center(_contours.back());
-  cv::Mat measurement = cv::Mat(2, 1, CV_32F);
-  measurement.at<float>(0) = center.x;
-  measurement.at<float>(1) = center.y;
-
-  _kalman.predict();
-  _kalman.correct(measurement);
+  // cv::Point2f center = contour_center(_contours.back());
+  // cv::Mat measurement = cv::Mat(2, 1, CV_32F);
+  // measurement.at<float>(0) = center.x;
+  // measurement.at<float>(1) = center.y;
+  //
+  // _kalman.predict();
+  // _kalman.correct(measurement);
 }
 
 cv::Point2f Particle::position() const {
