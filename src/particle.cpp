@@ -55,6 +55,10 @@ const long Particle::id() const { return _id; }
 
 const int Particle::lastFrame() const { return _frames.back(); }
 
+const std::vector<cv::Point> &Particle::lastContour() const {
+  return _contours.back();
+}
+
 const std::vector<cv::Point> &Particle::contour(const int index) const {
   if (index < 0)
     return _contours[_index];
@@ -145,15 +149,26 @@ cv::Point2f Particle::velocity() const {
                      _kalman.statePost.at<float>(3));
 }
 
-std::vector<cv::Point2f>
-Particle::predictedPositions(const int &to_frame) const {
+cv::Point2f Particle::predictedPosition(const int frame) const {
   cv::Mat prediction = _kalman.statePost.clone();
-  std::vector<cv::Point2f> positions;
-  for (int i = _frames.back(); i < to_frame; ++i) {
+  for (int i = _frames.back(); i < frame; ++i) {
+    cv::gemm(_kalman.transitionMatrix, prediction, 1.0, cv::noArray(), 0.0,
+             prediction);
+  }
+  return cv::Point2f(prediction.at<float>(0), prediction.at<float>(1));
+}
+
+std::vector<cv::Point> Particle::trajectory(const int frame_count) const {
+  cv::Mat prediction = _kalman.statePost.clone();
+  std::vector<cv::Point> positions;
+  positions.reserve(frame_count + 1);
+  positions.push_back(position());
+
+  for (int i = 0; i < frame_count; ++i) {
     cv::gemm(_kalman.transitionMatrix, prediction, 1.0, cv::noArray(), 0.0,
              prediction);
     positions.push_back(
-        cv::Point2f(prediction.at<float>(0), prediction.at<float>(1)));
+        cv::Point(prediction.at<float>(0), prediction.at<float>(1)));
   }
   return positions;
 }

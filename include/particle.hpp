@@ -40,6 +40,7 @@ public:
   const long id() const;
 
   const int lastFrame() const;
+  const std::vector<cv::Point> &lastContour() const;
 
   // current index access
   const std::vector<cv::Point> &contour(const int index = -1) const;
@@ -55,7 +56,7 @@ public:
   cv::Point2f position() const;
   cv::Point2f velocity() const;
   cv::Point2f predictedPosition(const int frame) const;
-  std::vector<cv::Point2f> predictedPositions(const int &to_frame) const;
+  std::vector<cv::Point> trajectory(const int frame_count) const;
 };
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,
