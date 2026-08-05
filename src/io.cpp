@@ -48,10 +48,10 @@ void write_particle_properties(const std::vector<Particle> &particles,
     ofs << contour_circularity(contour, moments.m00) << ",";
     ofs << contour_convexity(contour, moments.m00) << ",";
     ofs << image_intensity(it->image(), mask) << ",";
-    ofs << contour_maximum_feret(contour) << ",";
-    ofs << contour_minimum_feret(contour) << ",";
+    ofs << contour_maximum_feret(contour) << ","
+        << contour_minimum_feret(contour) << ",";
     ofs << legendre.y << "," << legendre.x << ",";
-    ofs << 2.0 * contour_mean_distance(contour, center);
+    ofs << 2.0 * contour_mean_distance(contour, center) << ",";
     ofs << cv::arcLength(contour, true) << ",";
     ofs << image_sharpness(it->image(), mask) << ",";
     ofs << center.x << "," << center.y << "\n";
