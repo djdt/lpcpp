@@ -55,6 +55,7 @@ public:
   cv::Point2f position() const;
   cv::Point2f velocity() const;
   cv::Point2f predictedPosition(const int frame) const;
+  std::vector<cv::Point2f> predictedPositions(const int &to_frame) const;
 };
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,

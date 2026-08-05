@@ -28,21 +28,22 @@ Particle::Particle(const int frame_number,
     _raw_images.push_back(raw_image(rect).clone());
   }
 
-  _kalman.init(6, 2);
-  static float t_vals[6][6] = {
-      {1.f, 0.f, 1.f, 0.f, 0.5f, 0.f}, {0.f, 1.f, 0.f, 1.f, 0.f, 0.5f},
-      {0.f, 0.f, 1.f, 0.f, 1.f, 0.f},  {0.f, 0.f, 0.f, 1.f, 0.f, 1.f},
-      {0.f, 0.f, 0.f, 0.f, 1.f, 0.f},  {0.f, 0.f, 0.f, 0.f, 0.f, 1.f}};
+  _kalman.init(4, 2);
 
-  _kalman.transitionMatrix = cv::Mat(6, 6, CV_32F, t_vals);
-  _kalman.measurementMatrix = cv::Mat::eye(2, 6, CV_32F);
+  static float t_vals[4][4] = {{1.f, 0.f, 1.f, 0.f},
+                               {0.f, 1.f, 0.f, 1.f},
+                               {0.f, 0.f, 1.f, 0.f},
+                               {0.f, 0.f, 0.f, 1.f}};
 
-  cv::setIdentity(_kalman.processNoiseCov, 1e-4);
+  _kalman.transitionMatrix = cv::Mat(4, 4, CV_32F, t_vals);
+  _kalman.measurementMatrix = cv::Mat::eye(2, 4, CV_32F);
+
+  cv::setIdentity(_kalman.processNoiseCov, 1e-3);
   cv::setIdentity(_kalman.measurementNoiseCov, 1e-2);
   cv::setIdentity(_kalman.errorCovPost, 1.f);
 
   cv::Moments moments = cv::moments(contour);
-  _kalman.statePost = cv::Mat::zeros(6, 1, CV_32F);
+  _kalman.statePost = cv::Mat::zeros(4, 1, CV_32F);
   _kalman.statePost.at<float>(0) = moments.m10 / moments.m00;
   _kalman.statePost.at<float>(1) = moments.m01 / moments.m00;
 
@@ -144,13 +145,17 @@ cv::Point2f Particle::velocity() const {
                      _kalman.statePost.at<float>(3));
 }
 
-cv::Point2f Particle::predictedPosition(const int frame) const {
+std::vector<cv::Point2f>
+Particle::predictedPositions(const int &to_frame) const {
   cv::Mat prediction = _kalman.statePost.clone();
-  for (int i = _frames.back(); i < frame; ++i) {
+  std::vector<cv::Point2f> positions;
+  for (int i = _frames.back(); i < to_frame; ++i) {
     cv::gemm(_kalman.transitionMatrix, prediction, 1.0, cv::noArray(), 0.0,
              prediction);
+    positions.push_back(
+        cv::Point2f(prediction.at<float>(0), prediction.at<float>(1)));
   }
-  return cv::Point2f(prediction.at<float>(0), prediction.at<float>(1));
+  return positions;
 }
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,
