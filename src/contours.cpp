@@ -127,7 +127,7 @@ double contour_minimum_feret(const std::vector<cv::Point> &contour) {
 void filter_contours(std::vector<std::vector<cv::Point>> &contours,
                      const cv::UMat &frame, const filter_args &args) {
   auto it = std::remove_if(
-      contours.begin(), contours.end(), [=](const std::vector<cv::Point> &c) {
+      contours.begin(), contours.end(), [&](const std::vector<cv::Point> &c) {
         cv::Moments moments = cv::moments(c);
         if (args.area.first != args.area.second) {
           if (moments.m00 < args.area.first || moments.m00 > args.area.second) {
@@ -165,7 +165,7 @@ void filter_contours(std::vector<std::vector<cv::Point>> &contours,
         // image based operations
         if ((args.intensity.first != args.intensity.second) ||
             (args.sharpness.first != args.sharpness.second)) {
-          cv::Mat mask;
+          cv::UMat mask;
           cv::Rect rect = cv::boundingRect(c);
           mask_for_contour(c, mask);
 
@@ -177,7 +177,7 @@ void filter_contours(std::vector<std::vector<cv::Point>> &contours,
             }
           }
           if (args.sharpness.first != args.sharpness.second) {
-            cv::Mat laplace;
+            cv::UMat laplace;
             double sharpness = image_sharpness(frame(rect), laplace);
             if (sharpness < args.sharpness.first ||
                 sharpness > args.sharpness.second) {

@@ -3,12 +3,13 @@ project(lpcpp
     VERSION 0.4.0
     LANGUAGES CXX
 )
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_EXPORT_COMPILE_COMMANDS Yes)
 
 add_compile_definitions(CMAKE_PROJECT_VERSION="${CMAKE_PROJECT_VERSION}")
+# add_compile_definitions(TRACY_ENABLE)
 
 file(GLOB lpcpp_SRC "src/*.cpp" "include/*.hpp")
 
@@ -29,14 +30,14 @@ else()
   message("HDF5 not found, disabling HDF5 export")
 endif()
 
-include(FetchContent)
-FetchContent_Declare(
-  tracy
-  GIT_REPOSITORY https://github.com/wolfpld/tracy.git
-  GIT_TAG master
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-)
-FetchContent_MakeAvailable(tracy)
-
-target_link_libraries(lpcpp PUBLIC TracyClient)
+# include(FetchContent)
+# FetchContent_Declare(
+#   tracy
+#   GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+#   GIT_TAG master
+#   GIT_SHALLOW TRUE
+#   GIT_PROGRESS TRUE
+# )
+# FetchContent_MakeAvailable(tracy)
+#
+# target_link_libraries(lpcpp PUBLIC Tracy::TracyClient)
