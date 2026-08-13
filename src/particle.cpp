@@ -3,6 +3,9 @@
 #include "contours.hpp"
 #include "cpuproc.hpp"
 
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
+#include <opencv2/geometry/2d.hpp>
 #include <vector>
 
 #include <opencv2/core.hpp>
@@ -18,11 +21,31 @@ Particle::Particle(const int frame_number,
 
   _frames.push_back(frame_number);
   _contours.push_back(contour);
+  // _contour_moments.push_back(cv::moments(contour));
 
   _images.push_back(image(rect).clone());
   if (!raw_image.empty()) {
     _raw_images.push_back(raw_image(rect).clone());
   }
+
+  // _kalman.init(4, 2);
+  //
+  // static float t_vals[4][4] = {{1.f, 0.f, 1.f, 0.f},
+  //                              {0.f, 1.f, 0.f, 1.f},
+  //                              {0.f, 0.f, 1.f, 0.f},
+  //                              {0.f, 0.f, 0.f, 1.f}};
+  //
+  // _kalman.transitionMatrix = cv::Mat(4, 4, CV_32F, t_vals);
+  // _kalman.measurementMatrix = cv::Mat::eye(2, 4, CV_32F);
+  //
+  // cv::setIdentity(_kalman.processNoiseCov, 1e-3);
+  // cv::setIdentity(_kalman.measurementNoiseCov, 1e-2);
+  // cv::setIdentity(_kalman.errorCovPost, 1.f);
+  //
+  // cv::Moments moments = cv::moments(contour);
+  // _kalman.statePost = cv::Mat::zeros(4, 1, CV_32F);
+  // _kalman.statePost.at<float>(0) = moments.m10 / moments.m00;
+  // _kalman.statePost.at<float>(1) = moments.m01 / moments.m00;
 
   _metric = calculate_selection_metric(contour, _images.back(), _metric_method);
 };
@@ -32,21 +55,32 @@ const long Particle::id() const { return _id; }
 
 const int Particle::lastFrame() const { return _frames.back(); }
 
-const int Particle::frame(const int index) const {
-  if (index < 0)
-    return _frames[_index];
-  return _frames[index];
+const std::vector<cv::Point> &Particle::lastContour() const {
+  return _contours.back();
 }
+
 const std::vector<cv::Point> &Particle::contour(const int index) const {
   if (index < 0)
     return _contours[_index];
   return _contours[index];
 }
+
+const int Particle::frame(const int index) const {
+  if (index < 0)
+    return _frames[_index];
+  return _frames[index];
+}
+
 const cv::Mat &Particle::image(const int index) const {
   if (index < 0)
     return _images[_index];
   return _images[index];
 }
+// const cv::Moments &Particle::moments(const int index) const {
+//   if (index < 0)
+//     return _contour_moments[_index];
+//   return _contour_moments[index];
+// }
 const cv::Mat &Particle::rawImage(const int index) const {
   if (index < 0)
     return _raw_images[_index];
@@ -80,6 +114,7 @@ void Particle::update(const int frame_number,
   } else {
     _contours.push_back(contour);
   }
+
   cv::Rect rect = cv::boundingRect(_contours.back());
   rect &= cv::Rect(0, 0, image.cols, image.rows);
 
@@ -94,19 +129,48 @@ void Particle::update(const int frame_number,
     _metric = metric;
     _index = _frames.size() - 1;
   }
+
+  // cv::Point2f center = contour_center(_contours.back());
+  // cv::Mat measurement = cv::Mat(2, 1, CV_32F);
+  // measurement.at<float>(0) = center.x;
+  // measurement.at<float>(1) = center.y;
+  //
+  // _kalman.predict();
+  // _kalman.correct(measurement);
+}
+
+cv::Point2f Particle::position() const {
+  return cv::Point2f(_kalman.statePost.at<float>(0),
+                     _kalman.statePost.at<float>(1));
 }
 
 cv::Point2f Particle::velocity() const {
-  if (frameCount() < 2) {
-    return cv::Point2f(0.0, 0.0);
-  }
-  cv::Moments cm = cv::moments(_contours.back());
-  cv::Moments pm = cv::moments(*(_contours.rbegin() + 1));
+  return cv::Point2f(_kalman.statePost.at<float>(2),
+                     _kalman.statePost.at<float>(3));
+}
 
-  double dt = _frames.back() - *(_frames.rbegin() + 1);
-  return (cv::Point2f(cm.m10 / cm.m00, cm.m01 / cm.m00) -
-          cv::Point2f(pm.m10 / pm.m00, pm.m01 / pm.m00)) /
-         dt;
+cv::Point2f Particle::predictedPosition(const int frame) const {
+  cv::Mat prediction = _kalman.statePost.clone();
+  for (int i = _frames.back(); i < frame; ++i) {
+    cv::gemm(_kalman.transitionMatrix, prediction, 1.0, cv::noArray(), 0.0,
+             prediction);
+  }
+  return cv::Point2f(prediction.at<float>(0), prediction.at<float>(1));
+}
+
+std::vector<cv::Point> Particle::trajectory(const int frame_count) const {
+  cv::Mat prediction = _kalman.statePost.clone();
+  std::vector<cv::Point> positions;
+  positions.reserve(frame_count + 1);
+  positions.push_back(position());
+
+  for (int i = 0; i < frame_count; ++i) {
+    cv::gemm(_kalman.transitionMatrix, prediction, 1.0, cv::noArray(), 0.0,
+             prediction);
+    positions.push_back(
+        cv::Point(prediction.at<float>(0), prediction.at<float>(1)));
+  }
+  return positions;
 }
 
 double calculate_selection_metric(const std::vector<cv::Point> &contour,

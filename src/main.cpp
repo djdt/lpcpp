@@ -26,30 +26,40 @@
 
 void draw_particles_on_frame(cv::InputArray &input,
                              cv::InputOutputArray &output,
-                             std::vector<Particle> &particles) {
+                             std::vector<Particle> &particles,
+                             bool draw_trajectory) {
   output.createSameSize(input, CV_8UC3);
   cv::cvtColor(input, output, cv::COLOR_GRAY2BGR);
 
-  auto color = cv::Scalar(0, 0, 255);
-  std::vector<std::vector<cv::Point>> contours;
-  contours.reserve(particles.size());
-
-  std::transform(particles.begin(), particles.end(),
-                 std::back_inserter(contours),
-                 [](const Particle &p) { return p.contour(); });
+  std::vector<std::vector<cv::Point>> selected_contours;
+  std::vector<std::vector<cv::Point>> current_contours;
+  selected_contours.reserve(particles.size());
+  current_contours.reserve(particles.size());
 
   for (const auto &p : particles) {
-    const auto &contour = p.contour(p.frameCount() - 1);
-    auto center = contour_center(contour);
-    cv::drawContours(output, {contour}, -1, cv::Scalar(0, 0, 127), 1.0, 8);
-    cv::drawContours(output, {p.contour()}, -1, cv::Scalar(0, 0, 255), 1.0, 8);
-    cv::line(output, center, center + p.velocity(), cv::Scalar(255, 0, 0), 1.0);
+    selected_contours.push_back(p.contour());
+    if (p.frame() != p.lastFrame()) {
+      current_contours.push_back(p.lastContour());
+    }
+  }
+
+  cv::drawContours(output, current_contours, -1, cv::Scalar(0, 0, 127), 1.0, 8);
+  cv::drawContours(output, selected_contours, -1, cv::Scalar(0, 0, 255), 1.0,
+                   8);
+
+  if (draw_trajectory) {
+    std::vector<std::vector<cv::Point>> lines;
+    lines.reserve(particles.size());
+    for (const auto &p : particles) {
+      lines.push_back({p.position(), p.predictedPosition(p.lastFrame() + 1)});
+    }
+    cv::polylines(output, lines, false, cv::Scalar(255, 0, 0), 1);
   }
 }
 
 bool export_particle_data(const std::filesystem::path &path,
                           const ::std::vector<Particle> &particles,
-                          bool png = false, bool tiff = false, bool vti = false,
+                          bool png = false, bool vti = false,
                           bool hdf5 = false) {
   if (png) {
     std::filesystem::create_directory(path / "png");
@@ -80,7 +90,6 @@ bool export_particle_data(const std::filesystem::path &path,
 }
 
 int main(int argc, char *argv[]) {
-
   CLI::App app;
   app.option_defaults()->always_capture_default();
   app.set_help_flag("");
@@ -99,6 +108,7 @@ int main(int argc, char *argv[]) {
 
   bool create_config = false;
   bool draw = false;
+  bool trajectory = false;
   bool export_png = false, export_hdf5 = false, export_vti = false;
 
   ParticleFrameMetric selection_metric = METRIC_CENTER_WEIGHTED_INTENSITY;
@@ -120,7 +130,7 @@ int main(int argc, char *argv[]) {
           ->check(CLI::ExistingFile, "FileExists")
           ->configurable(false);
   app.add_option("--output,-o", outname,
-                 "specify the output directory, defaults to 'processed'")
+                 "specify the output directory, defaults to './processed'")
       ->check(CLI::NonexistentPath | CLI::ExistingDirectory)
       ->configurable(false);
 
@@ -137,6 +147,8 @@ int main(int argc, char *argv[]) {
   app.add_option("--track", particle_frames,
                  "number of frames to track particles after last detection")
       ->check(CLI::PositiveNumber);
+  app.add_flag("--trajectory", trajectory,
+               "calculate particle trajectories to predict particle positions");
   app.add_option("--distance", particle_distance,
                  "minimum distance between particles")
       ->check(CLI::PositiveNumber);
@@ -346,8 +358,8 @@ int main(int argc, char *argv[]) {
     cv::medianBlur(frame, frame, 5);
     frame.convertTo(processed, CV_32F); // ensure type correct for preproc
 
-    // main processing, extract the difference from the mean, apply unsharp mask
-    // then get threshold where greater than then z * std
+    // main processing, extract the difference from the mean, apply unsharp
+    // mask then get threshold where greater than then z * std
     preprocess_and_threshold(processed, acc_mean, acc_var, processed, threshold,
                              zscore, unsharp_alpha, preprocess_mode);
     // mask off the capillary edges
@@ -367,7 +379,8 @@ int main(int argc, char *argv[]) {
     // update particles with new contours
     //
 
-    // move the diff image to the CPU, since it gets cropped and is then faster
+    // move the diff image to the CPU, since it gets cropped and is then
+    // faster
     cv::Mat cpu_proc = processed.getMat(cv::ACCESS_READ);
     // only move frame image if we are exporting, expensive operation
     cv::Mat cpu_frame;
@@ -425,7 +438,7 @@ int main(int argc, char *argv[]) {
 
     if (draw) {
       cv::UMat rgb_frame;
-      draw_particles_on_frame(frame, rgb_frame, particles);
+      draw_particles_on_frame(frame, rgb_frame, particles, trajectory);
       // draw capilary bounds
       cv::circle(rgb_frame, cv::Point(capillary[0], capillary[1]), capillary[2],
                  cv::Scalar(0, 255, 0), 1);
@@ -442,7 +455,8 @@ int main(int argc, char *argv[]) {
     //
 
     write_particle_properties(output_particles, ofs_results);
-    export_particle_data(output_dir, output_particles, export_png);
+    export_particle_data(output_dir, output_particles, export_png, export_vti,
+                         export_hdf5);
 
     //
     // update progress
@@ -473,7 +487,8 @@ int main(int argc, char *argv[]) {
   //
 
   write_particle_properties(particles, ofs_results);
-  export_particle_data(output_dir, particles, export_png);
+  export_particle_data(output_dir, particles, export_png, export_vti,
+                       export_hdf5);
 
   cv::UMat acc_out, acc_var_out;
   acc_mean.convertTo(acc_out, CV_8U);

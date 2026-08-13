@@ -35,7 +35,9 @@ double image_intensity(cv::InputArray &image, cv::InputArray &mask) {
   if (mask.empty()) {
     return cv::sum(image)[0];
   }
-  return cv::mean(image, mask)[0] * cv::countNonZero(mask);
+  cv::UMat sum;
+  image.copyTo(sum, mask);
+  return cv::sum(sum)[0];
 }
 
 double image_sharpness(cv::InputArray &image, cv::OutputArray &laplace) {
