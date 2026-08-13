@@ -473,7 +473,7 @@ int main(int argc, char *argv[]) {
       std::cout << std::setw(3) << static_cast<int>(fps) << " FPS, ";
       std::cout << particle_count << " particles, ";
       std::cout << particles.size() << " active, ";
-      std::cout << std::format("{:%T}", remaining) << " remaining.\r"
+      std::cout << std::format("{}", remaining) << " remaining.\r"
                 << std::flush;
 
       update_time = frame_time + std::chrono::seconds(1);
@@ -504,8 +504,7 @@ int main(int argc, char *argv[]) {
       std::chrono::system_clock::now() - start_time);
 
   std::cout << std::endl
-            << "Finished in " << std::format("{:%T}", total_duration)
-            << std::endl;
+            << "Finished in " << std::format("{}", total_duration) << std::endl;
 
   return 0;
 }
