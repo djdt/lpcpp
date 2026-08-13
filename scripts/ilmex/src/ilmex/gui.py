@@ -1,13 +1,12 @@
-import numpy as np
-import numpy.lib.recfunctions as rfn
 from importlib.metadata import version
-
 from pathlib import Path
 
+import numpy as np
+import numpy.lib.recfunctions as rfn
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ilmex.colors import cividis
 from ilmex.charts import HistogramChart, ScatterChart
+from ilmex.colors import cividis
 from ilmex.widgets import RangeSlider
 
 
@@ -314,9 +313,9 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         elif self.data_format == "lpcpp":  # convert pixels to um
             self.data["area"] *= pixel_size**2
             self.data["circular_equivalent_diameter"] *= pixel_size
-            self.data["radius"] *= pixel_size
+            self.data["mean_diameter"] *= pixel_size
             self.data = rfn.append_fields(
-                self.data, "diameter", self.data["radius"] * 2.0, usemask=False
+                self.data, "diameter", self.data["mean_diameter"], usemask=False
             )
         else:
             raise ValueError("unknown data format:", self.data_format)
