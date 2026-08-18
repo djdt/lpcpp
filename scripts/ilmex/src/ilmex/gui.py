@@ -313,10 +313,16 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         elif self.data_format == "lpcpp":  # convert pixels to um
             self.data["area"] *= pixel_size**2
             self.data["circular_equivalent_diameter"] *= pixel_size
-            self.data["mean_diameter"] *= pixel_size
-            self.data = rfn.append_fields(
-                self.data, "diameter", self.data["mean_diameter"], usemask=False
-            )
+            if "mean_diameter" in self.data.dtype.names:
+                self.data["mean_diameter"] *= pixel_size
+                self.data = rfn.append_fields(
+                    self.data, "diameter", self.data["mean_diameter"], usemask=False
+                )
+            else:
+                self.data["radius"] *= pixel_size
+                self.data = rfn.append_fields(
+                    self.data, "diameter", self.data["radius"] * 2.0, usemask=False
+                )
         else:
             raise ValueError("unknown data format:", self.data_format)
 
