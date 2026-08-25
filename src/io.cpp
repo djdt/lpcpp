@@ -30,7 +30,7 @@ void write_particle_properties(const std::vector<Particle> &particles,
   cv::Mat mask;
   for (auto it = particles.begin(); it != particles.end(); ++it) {
     const std::vector<cv::Point> &contour = it->contour();
-    cv::Moments moments = cv::moments(contour);
+    cv::Moments moments = it->moments();
 
     mask_for_contour(contour, mask);
 

@@ -29,7 +29,7 @@ double box_edge_distance(const cv::Rect &rect_a, const cv::Rect &rect_b) {
   return std::max(dist.x, dist.y);
 }
 
-double contour_aspect(const std::vector<cv::Point> &contour) {
+double contour_aspect(const Contour &contour) {
   cv::RotatedRect rect = cv::minAreaRect(contour);
   double aspect = rect.size.aspectRatio();
   if (aspect > 1.0) {
@@ -37,46 +37,37 @@ double contour_aspect(const std::vector<cv::Point> &contour) {
   }
   return aspect;
 }
+//
+// cv::Point2f contour_center(const Contour &contour) {
+//   cv::Moments moments = cv::moments(contour);
+//   return cv::Point2f(moments.m10 / moments.m00, moments.m01 / moments.m00);
+// }
 
-cv::Point2f contour_center(const std::vector<cv::Point> &contour) {
-  cv::Moments moments = cv::moments(contour);
-  return cv::Point2f(moments.m10 / moments.m00, moments.m01 / moments.m00);
-}
-
-double
-contour_circular_equivalent_diameter(const std::vector<cv::Point> &contour,
-                                     const double area) {
-  if (std::isnan(area))
-    double area = cv::contourArea(contour);
+double contour_circular_equivalent_diameter(const Contour &contour,
+                                            const double area) {
   return std::sqrt((4.0 * area) / std::numbers::pi);
 }
 
-double contour_circularity(const std::vector<cv::Point> &contour,
-                           const double area) {
-  if (std::isnan(area))
-    double area = cv::contourArea(contour);
+double contour_circularity(const Contour &contour, const double area) {
   auto perim = cv::arcLength(contour, true);
   return std::sqrt(4.0 * std::numbers::pi * area / (perim * perim));
 }
 
-double contour_convexity(const std::vector<cv::Point> &contour,
-                         const double area) {
-  if (std::isnan(area))
-    double area = cv::contourArea(contour);
-  std::vector<cv::Point> hull;
+double contour_convexity(const Contour &contour, const double area) {
+  Contour hull;
   cv::convexHull(contour, hull);
   return area / cv::contourArea(hull);
 }
 
-double contour_edge_distance_box(const std::vector<cv::Point> &contour_a,
-                                 const std::vector<cv::Point> &contour_b) {
+double contour_edge_distance_box(const Contour &contour_a,
+                                 const Contour &contour_b) {
   cv::Rect rect_a = cv::boundingRect(contour_a);
   cv::Rect rect_b = cv::boundingRect(contour_b);
   return box_edge_distance(rect_a, rect_b);
 }
 
-double contour_edge_distance_circle(const std::vector<cv::Point> &contour_a,
-                                    const std::vector<cv::Point> &contour_b) {
+double contour_edge_distance_circle(const Contour &contour_a,
+                                    const Contour &contour_b) {
   cv::Point2f center_a, center_b;
   float radius_a, radius_b;
   cv::minEnclosingCircle(contour_a, center_a, radius_a);
@@ -84,13 +75,12 @@ double contour_edge_distance_circle(const std::vector<cv::Point> &contour_a,
   return cv::norm(center_a - center_b) - (radius_a + radius_b);
 }
 
-double contour_edge_distance(const std::vector<cv::Point> &contour,
-                             const cv::Point2f &pos) {
+double contour_edge_distance(const Contour &contour, const cv::Point2f &pos) {
   return -cv::pointPolygonTest(contour, pos, true);
 }
 
-double contour_edge_distance(const std::vector<cv::Point> &contour_a,
-                             const std::vector<cv::Point> &contour_b) {
+double contour_edge_distance(const Contour &contour_a,
+                             const Contour &contour_b) {
   // possible to approximate with getClosestEllipsePoints
   std::vector<double> dists;
   dists.reserve(contour_b.size());
@@ -101,12 +91,11 @@ double contour_edge_distance(const std::vector<cv::Point> &contour_a,
   return *std::min_element(dists.begin(), dists.end());
 }
 
-double contour_mean_diameter(const std::vector<cv::Point> &contour) {
-  return contour_mean_distance(contour, contour_center(contour)) * 2.0;
-}
+// double contour_mean_diameter(const Contour &contour,) {
+//   return contour_mean_distance(contour, contour_center(contour)) * 2.0;
+// }
 
-double contour_mean_distance(const std::vector<cv::Point> &contour,
-                             const cv::Point2f &pos) {
+double contour_mean_distance(const Contour &contour, const cv::Point2f &pos) {
   double sum = std::accumulate(contour.begin(), contour.end(), 0.0,
                                [&pos](double sum, const cv::Point2f &p) {
                                  return sum + cv::norm(pos - p);
@@ -114,50 +103,51 @@ double contour_mean_distance(const std::vector<cv::Point> &contour,
   return sum / contour.size();
 }
 
-double contour_maximum_feret(const std::vector<cv::Point> &contour) {
+double contour_maximum_feret(const Contour &contour) {
   auto rect = cv::minAreaRect(contour);
   return std::max(rect.size.width, rect.size.height);
 }
 
-double contour_minimum_feret(const std::vector<cv::Point> &contour) {
+double contour_minimum_feret(const Contour &contour) {
   auto rect = cv::minAreaRect(contour);
   return std::min(rect.size.width, rect.size.height);
 }
 
-void filter_contours(std::vector<std::vector<cv::Point>> &contours,
+void filter_contours(std::vector<std::pair<Contour, cv::Moments>> &contours,
                      const cv::UMat &frame, const filter_args &args) {
   auto it = std::remove_if(
-      contours.begin(), contours.end(), [&](const std::vector<cv::Point> &c) {
-        cv::Moments moments = cv::moments(c);
+      contours.begin(), contours.end(),
+      [&](const std::pair<Contour, cv::Moments> &p) {
         if (args.area.first != args.area.second) {
-          if (moments.m00 < args.area.first || moments.m00 > args.area.second) {
+          if (p.second.m00 < args.area.first ||
+              p.second.m00 > args.area.second) {
             return true;
           }
         }
         if (args.aspect.first != args.aspect.second) {
-          double aspect = contour_aspect(c);
+          double aspect = contour_aspect(p.first);
           if (aspect < args.aspect.first || aspect > args.aspect.second) {
             return true;
           }
         }
         if (args.circularity.first != args.circularity.second) {
-          double circularity = contour_circularity(c, moments.m00);
+          double circularity = contour_circularity(p.first, p.second.m00);
           if (circularity < args.circularity.first ||
               circularity > args.circularity.second) {
             return true;
           }
         }
         if (args.convexity.first != args.convexity.second) {
-          double convexity = contour_convexity(c, moments.m00);
+          double convexity = contour_convexity(p.first, p.second.m00);
           if (convexity < args.convexity.first ||
               convexity > args.convexity.second) {
             return true;
           }
         }
         if (args.radius.first != args.radius.second) {
-          double radius =
-              contour_mean_distance(c, cv::Point2f(moments.m10 / moments.m00,
-                                                   moments.m01 / moments.m00));
+          cv::Point2f center = cv::Point2f(p.second.m10 / p.second.m00,
+                                           p.second.m01 / p.second.m00);
+          double radius = contour_mean_distance(p.first, center);
           if (radius < args.radius.first || radius > args.radius.second) {
             return true;
           }
@@ -166,8 +156,8 @@ void filter_contours(std::vector<std::vector<cv::Point>> &contours,
         if ((args.intensity.first != args.intensity.second) ||
             (args.sharpness.first != args.sharpness.second)) {
           cv::UMat mask;
-          cv::Rect rect = cv::boundingRect(c);
-          mask_for_contour(c, mask);
+          cv::Rect rect = cv::boundingRect(p.first);
+          mask_for_contour(p.first, mask);
 
           if (args.intensity.first != args.intensity.second) {
             double intensity = image_intensity(frame(rect), mask);
@@ -190,8 +180,7 @@ void filter_contours(std::vector<std::vector<cv::Point>> &contours,
   contours.erase(it, contours.end());
 }
 
-void mask_for_contour(const std::vector<cv::Point> &contour,
-                      cv::InputOutputArray &mask) {
+void mask_for_contour(const Contour &contour, cv::InputOutputArray &mask) {
   cv::Rect rect = cv::boundingRect(contour);
   mask.create(rect.size(), CV_8U);
   mask.setTo(0);

@@ -6,6 +6,8 @@
 #include <opencv2/core.hpp>
 #include <opencv2/video/tracking.hpp>
 
+typedef std::vector<cv::Point> Contour;
+
 enum ParticleFrameMetric {
   METRIC_AVERAGE_INTENSITY,
   METRIC_CENTER_WEIGHTED_INTENSITY,
@@ -23,8 +25,7 @@ private:
   std::vector<int> _frames;
   std::vector<cv::Mat> _images;
   std::vector<cv::Mat> _raw_images;
-  std::vector<std::vector<cv::Point>> _contours;
-  // std::vector<cv::Moments> _contour_moments;
+  std::vector<std::pair<Contour, cv::Moments>> _contours;
 
   cv::KalmanFilter _kalman; // position tracking
 
@@ -32,7 +33,8 @@ private:
 
 public:
   // ensure a cv::Mat here
-  Particle(const int frame_number, const std::vector<cv::Point> &contour,
+  Particle(const int frame_number,
+           const std::pair<Contour, cv::Moments> &contour_pair,
            const cv::Mat &image, const cv::Mat &raw_image,
            ParticleFrameMetric metric = METRIC_CENTER_WEIGHTED_INTENSITY);
 
@@ -40,17 +42,18 @@ public:
   const long id() const;
 
   const int lastFrame() const;
-  const std::vector<cv::Point> &lastContour() const;
+  const Contour &lastContour() const;
 
   // current index access
-  const std::vector<cv::Point> &contour(const int index = -1) const;
+  const Contour &contour(const int index = -1) const;
   const int frame(const int index = -1) const;
   const cv::Mat &image(const int index = -1) const;
   const cv::Moments &moments(const int index = -1) const;
   const cv::Mat &rawImage(const int index = -1) const;
 
   const cv::Rect boundingRect() const;
-  void update(const int frame_number, const std::vector<cv::Point> &contour,
+  void update(const int frame_number,
+              const std::pair<Contour, cv::Moments> &contour_pair,
               const cv::Mat &image, const cv::Mat &raw_image);
 
   cv::Point2f position() const;
@@ -59,6 +62,6 @@ public:
   std::vector<cv::Point> trajectory(const int frame_count) const;
 };
 
-double calculate_selection_metric(const std::vector<cv::Point> &contour,
-                                  cv::InputArray &image,
-                                  ParticleFrameMetric metric);
+double
+calculate_selection_metric(const std::pair<Contour, cv::Moments> &contour_pair,
+                           cv::InputArray &image, ParticleFrameMetric metric);

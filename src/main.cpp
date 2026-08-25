@@ -12,7 +12,9 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <opencv2/geometry/2d.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <opencv2/core.hpp>
@@ -144,7 +146,7 @@ int main(int argc, char *argv[]) {
          "--background", background_frames,
          "number of background frames used to determine initial mean and std")
       ->check(CLI::PositiveNumber);
-  app.add_option("--track", particle_frames,
+  app.add_option("--track,--frames", particle_frames,
                  "number of frames to track particles after last detection")
       ->check(CLI::PositiveNumber);
   app.add_flag("--trajectory", trajectory,
@@ -369,9 +371,17 @@ int main(int argc, char *argv[]) {
     // find and filter contours
     //
 
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(threshold, contours, cv::RETR_EXTERNAL,
+    std::vector<std::vector<cv::Point>> _contours;
+    cv::findContours(threshold, _contours, cv::RETR_EXTERNAL,
                      cv::CHAIN_APPROX_SIMPLE);
+
+    std::vector<std::pair<std::vector<cv::Point>, cv::Moments>> contours;
+    contours.reserve(contours.size());
+    std::transform(_contours.begin(), _contours.end(),
+                   std::back_inserter(contours),
+                   [](const std::vector<cv::Point> &contour) {
+                     return std::make_pair(contour, cv::moments(contour));
+                   });
 
     filter_contours(contours, processed, contour_filter_args);
 
@@ -389,11 +399,19 @@ int main(int argc, char *argv[]) {
 
     std::for_each(
         contours.begin(), contours.end(),
-        [&](const std::vector<cv::Point> &contour) {
+        [&](const std::pair<std::vector<cv::Point>, cv::Moments> &p) {
           bool existing = false;
           for (auto &particle : particles) {
-            cv::Rect rect = cv::boundingRect(contour);
-            cv::Rect particle_rect = cv::boundingRect(particle.contour());
+            cv::Rect rect = cv::boundingRect(p.first);
+            const auto particle_contour = particle.contour();
+
+            // if (trajectory) {
+            //   std::for_each(contour.begin(), contour.end(), [](cv::Point p) {
+            //       p +=
+            //       })
+            // }
+
+            cv::Rect particle_rect = cv::boundingRect(particle_contour);
             // check boxes first, early exit if far
             double dist = box_edge_distance(rect, particle_rect);
             if (dist > particle_distance)
@@ -401,26 +419,25 @@ int main(int argc, char *argv[]) {
 
             // finer check for close particles, larger contour as first
             if (rect.size().area() > particle_rect.size().area()) {
-              dist = contour_edge_distance(contour, particle.contour());
+              dist = contour_edge_distance(p.first, particle_contour);
             } else {
-              dist = contour_edge_distance(particle.contour(), contour);
+              dist = contour_edge_distance(particle_contour, p.first);
             }
 
             if (dist < particle_distance) {
-              particle.update(frame_pos, contour, cpu_proc, cpu_frame);
+              particle.update(frame_pos, p, cpu_proc, cpu_frame);
               existing = true;
               break;
             }
           }
           if (!existing) {
-            particles.push_back(
-                Particle(frame_pos, contour, cpu_proc, cpu_frame));
+            particles.push_back(Particle(frame_pos, p, cpu_proc, cpu_frame));
             particle_count += 1;
           }
         });
 
     //
-    // remove untrakced (old) particles from the vector
+    // remove untracked (old) particles from the vector
     //
 
     auto pivot = std::stable_partition(
