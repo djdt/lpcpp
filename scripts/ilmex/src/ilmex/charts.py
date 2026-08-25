@@ -1,10 +1,8 @@
+import numpy as np
+import pyqtgraph
 from PySide6 import QtCore, QtGui, QtWidgets
 
-import numpy as np
-
 from ilmex.colors import cividis
-
-import pyqtgraph
 
 
 class BaseChart(pyqtgraph.PlotWidget):
@@ -31,6 +29,16 @@ class HistogramChart(BaseChart):
         self.xaxis.setLabel("Size (µm)")
 
         brush = QtGui.QBrush(cividis[64])
+        self.series_filtered = pyqtgraph.PlotCurveItem(
+            x=[0, 0],
+            y=[0],
+            stepMode="center",
+            fillLevel=0,
+            fillOutline=True,
+            brush=QtGui.QBrush(QtCore.Qt.GlobalColor.lightGray),
+            skipFiniteCheck=True,
+        )
+        self.addItem(self.series_filtered)
         self.series = pyqtgraph.PlotCurveItem(
             x=[0, 0],
             y=[0],
@@ -53,13 +61,21 @@ class HistogramChart(BaseChart):
     def updateHistogram(
         self,
         data: np.ndarray,
+        filter: np.ndarray | None = None,
         bins: np.ndarray | int | None = None,
         density: bool = False,
-        scale_yaxis: bool = True,
     ):
-        counts, edges = np.histogram(data, bins=bins, density=density)  # type: ignore
+        edges = np.histogram_bin_edges(data, bins=bins)
+        if filter is not None:
+            counts, _ = np.histogram(data[filter], bins=edges, density=density)
+            self.series.setData(y=counts, x=edges)
+            counts, _ = np.histogram(data, bins=edges, density=density)
+            self.series_filtered.setData(y=counts, x=edges)
+        else:
+            counts, _ = np.histogram(data, bins=edges, density=density)
+            self.series.setData(y=counts, x=edges)
+            self.series_filtered.clear()
 
-        self.series.setData(y=counts, x=edges)
         self.setLimits(yMax=counts.max() * 1.1)
         self.autoRange()
 
@@ -71,6 +87,11 @@ class ScatterChart(BaseChart):
             size=5, symbol="o", pen=QtGui.QPen(QtCore.Qt.GlobalColor.black, 0)
         )
         self.addItem(self.series)
+
+        self.series_filtered = pyqtgraph.ScatterPlotItem(
+            size=5, symbol="o", pen=QtGui.QPen(QtCore.Qt.GlobalColor.lightGray, 0)
+        )
+        self.addItem(self.series_filtered)
 
         self.roi = pyqtgraph.RectROI(
             (0.0, 0.0),
@@ -85,6 +106,18 @@ class ScatterChart(BaseChart):
         self.roi.addScaleHandle((0, 0), (1, 1))
         self.addItem(self.roi)
 
-    def updateScatter(self, xs: np.ndarray, ys: np.ndarray):
-        self.series.setData(x=xs, y=ys)
-        self.autoRange()
+    def updateScatter(
+        self, xs: np.ndarray, ys: np.ndarray, mask: np.ndarray | None = None
+    ):
+        if mask is not None:
+            self.series.setData(x=xs[mask], y=ys[mask])
+            self.series_filtered.setData(x=xs[~mask], y=ys[~mask])
+        else:
+            self.series.setData(x=xs, y=ys)
+            self.series_filtered.clear()
+        xmin, xmax = xs.min(), xs.max()
+        ymin, ymax = ys.min(), ys.max()
+        dx, dy = (xmax - xmin) * 0.05, (ymax - ymin) * 0.05
+        self.setLimits(xMin=xmin - dx, xMax=xmax + dx, yMin=ymin - dy, yMax=ymax + dy)
+        self.getPlotItem().setXRange(xmin - dx, xmax + dx)
+        self.getPlotItem().setYRange(ymin - dy, ymax + dy)

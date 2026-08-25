@@ -1,5 +1,6 @@
 from importlib.metadata import version
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 import numpy.lib.recfunctions as rfn
@@ -176,10 +177,10 @@ class ScatterWidget(QtWidgets.QWidget):
         layout.addLayout(layout_combo, 0)
         self.setLayout(layout)
 
-    def updateScatter(self, data: np.ndarray, reset_roi: bool = True):
+    def updateScatter(self, data: np.ndarray, mask: np.ndarray | None = None):
         xs = data[self.combo_x.currentText()]
         ys = data[self.combo_y.currentText()]
-        self.chart.updateScatter(xs, ys)
+        self.chart.updateScatter(xs, ys, mask)
 
     def updateROI(self, data: np.ndarray):
         xs = data[self.combo_x.currentText()]
@@ -227,8 +228,8 @@ class CapillaryWidget(QtWidgets.QWidget):
 
     def updateImage(self, data: np.ndarray):
         hist, _, _ = np.histogram2d(
-            data["x"],
             data["y"],
+            data["x"],
             bins=(
                 np.arange(0, ExplorerWindow.CAMERA_SIZE[1], 25),
                 np.arange(0, ExplorerWindow.CAMERA_SIZE[0], 25),
@@ -256,7 +257,7 @@ class CapillaryWidget(QtWidgets.QWidget):
 
 class ExplorerWindow(QtWidgets.QMainWindow):
     CAMERA_SIZE = 2048, 1536
-    VALID_RANGES = {  # name : (min val, max val, scale)
+    VALID_RANGES: ClassVar = {  # name : (min val, max val, scale)
         "frame_count": (1, None, 1),
         "area": (0, None, 1),
         "aspect": (0, 1.0, 1e-2),
@@ -269,7 +270,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         "x": (None, None, 1),
         "y": (None, None, 1),
     }
-    BRAVE_COLUMNS = {
+    BRAVE_COLUMNS: ClassVar = {
         1: "diameter",
         6: "cicrularity",
         7: "convexity",
@@ -330,10 +331,10 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         assert self.data.dtype.names is not None
 
         self.scatter = ScatterWidget(self.data)
-        self.scatter.chart.roi.sigRegionChangeFinished.connect(self.redrawCapillary)
-        self.scatter.chart.roi.sigRegionChangeFinished.connect(self.redrawHistogram)
-        self.scatter.redrawRequested.connect(self.redrawScatter)
-        self.scatter.redrawRequested.connect(self.redrawCapillary)
+        self.scatter.chart.roi.sigRegionChangeFinished.connect(self.redrawAll)
+        self.scatter.redrawRequested.connect(self.redrawAll)
+        self.scatter.combo_x.currentIndexChanged.connect(self.updateScatterROI)
+        self.scatter.combo_y.currentIndexChanged.connect(self.updateScatterROI)
 
         self.hist = HistogramChart()
         self.hist.setLimits(
@@ -341,8 +342,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         )
         self.hist.region.setRegion(np.percentile(self.data["diameter"], [1, 99]))
         self.hist.region.setBounds((0.0, self.data["diameter"].max()))
-        self.hist.region.sigRegionChangeFinished.connect(self.redrawCapillary)
-        self.hist.region.sigRegionChangeFinished.connect(self.updateScatter)
+        self.hist.region.sigRegionChangeFinished.connect(self.redrawAll)
 
         self.hist.cursorMoved.connect(self.printCursorPos)
 
@@ -365,10 +365,18 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         self.status_bar = self.statusBar()
 
+        self.check_filter = QtWidgets.QCheckBox("Draw filtered particles")
+        self.check_filter.setChecked(True)
+        self.check_filter.setToolTip(
+            "Draw filtered particles on the histogram and scatter in gray."
+        )
+        self.check_filter.checkStateChanged.connect(self.redrawAll)
+
         controls_layout = QtWidgets.QFormLayout()
         for name, slider in self.sliders.items():
             controls_layout.addRow(name.replace("_", " ").title(), slider)
 
+        controls_layout.addWidget(self.check_filter)
         controls_widget = QtWidgets.QWidget()
         controls_widget.setMinimumWidth(300)
         controls_widget.setLayout(controls_layout)
@@ -397,6 +405,7 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         self.createMenuBar()
         self.redrawAll()
+        self.updateScatterROI()
 
     def createMenuBar(self):
         menu_bar = self.menuBar()
@@ -487,24 +496,66 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         return data
 
+    def dataAndMask(
+        self, hist: bool = True, scatter: bool = True
+    ) -> tuple[np.ndarray, np.ndarray]:
+        data = self.data
+        mask = np.ones(self.data.shape, bool)
+        for name, slider in self.sliders.items():
+            vmin, vmax = slider.scaled()
+            mask = np.logical_and(
+                mask, np.logical_and(data[name] >= vmin, data[name] <= vmax)
+            )
+
+        if hist:
+            hist_min, hist_max = self.hist.region.getRegion()
+            mask = np.logical_and(
+                mask,
+                np.logical_and(
+                    data["diameter"] >= hist_min, data["diameter"] <= hist_max
+                ),
+            )
+        if scatter:
+            xmin, ymin = self.scatter.chart.roi.pos()
+            dx, dy = self.scatter.chart.roi.size()
+            mask = np.logical_and(
+                mask,
+                np.logical_and(
+                    np.logical_and(
+                        data[self.scatter.combo_x.currentText()] >= xmin,
+                        data[self.scatter.combo_x.currentText()] <= xmin + dx,
+                    ),
+                    np.logical_and(
+                        data[self.scatter.combo_y.currentText()] >= ymin,
+                        data[self.scatter.combo_y.currentText()] <= ymin + dy,
+                    ),
+                ),
+            )
+        return data, mask
+
     def redrawAll(self):
         self.redrawHistogram()
         self.redrawCapillary()
         self.redrawScatter()
 
     def redrawCapillary(self):
-        data = self.filteredData(hist=True, scatter=True)
+        data = self.filteredData(True, True)
         self.capillary.updateImage(data)
 
     def redrawHistogram(self):
-        data = self.filteredData(scatter=True)
-        self.hist.updateHistogram(data["diameter"], bins=100)
-
-    def updateScatter(self):
-        data = self.filteredData(hist=True)
-        self.scatter.updateScatter(data)
+        data, mask = self.dataAndMask()
+        if self.check_filter.isChecked():
+            self.hist.updateHistogram(data["diameter"], mask, bins=100)
+        else:
+            self.hist.updateHistogram(data["diameter"][mask], bins=100)
 
     def redrawScatter(self):
-        data = self.filteredData(hist=True)
-        self.scatter.updateScatter(data)
+        data, mask = self.dataAndMask()
+        if self.check_filter.isChecked():
+            self.scatter.updateScatter(data, mask)
+        else:
+            self.scatter.updateScatter(data[mask])
+
+    def updateScatterROI(self):
+        data, _ = self.dataAndMask()
         self.scatter.updateROI(data)
