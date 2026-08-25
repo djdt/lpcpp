@@ -33,8 +33,8 @@ void draw_particles_on_frame(cv::InputArray &input,
   output.createSameSize(input, CV_8UC3);
   cv::cvtColor(input, output, cv::COLOR_GRAY2BGR);
 
-  std::vector<std::vector<cv::Point>> selected_contours;
-  std::vector<std::vector<cv::Point>> current_contours;
+  std::vector<Contour> selected_contours;
+  std::vector<Contour> current_contours;
   selected_contours.reserve(particles.size());
   current_contours.reserve(particles.size());
 
@@ -371,15 +371,14 @@ int main(int argc, char *argv[]) {
     // find and filter contours
     //
 
-    std::vector<std::vector<cv::Point>> _contours;
+    std::vector<Contour> _contours;
     cv::findContours(threshold, _contours, cv::RETR_EXTERNAL,
                      cv::CHAIN_APPROX_SIMPLE);
 
-    std::vector<std::pair<std::vector<cv::Point>, cv::Moments>> contours;
+    std::vector<std::pair<Contour, cv::Moments>> contours;
     contours.reserve(contours.size());
     std::transform(_contours.begin(), _contours.end(),
-                   std::back_inserter(contours),
-                   [](const std::vector<cv::Point> &contour) {
+                   std::back_inserter(contours), [](const Contour &contour) {
                      return std::make_pair(contour, cv::moments(contour));
                    });
 
@@ -399,7 +398,7 @@ int main(int argc, char *argv[]) {
 
     std::for_each(
         contours.begin(), contours.end(),
-        [&](const std::pair<std::vector<cv::Point>, cv::Moments> &p) {
+        [&](const std::pair<Contour, cv::Moments> &p) {
           bool existing = false;
           for (auto &particle : particles) {
             cv::Rect rect = cv::boundingRect(p.first);
