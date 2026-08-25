@@ -12,7 +12,9 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <opencv2/geometry/2d.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <opencv2/core.hpp>
@@ -31,8 +33,8 @@ void draw_particles_on_frame(cv::InputArray &input,
   output.createSameSize(input, CV_8UC3);
   cv::cvtColor(input, output, cv::COLOR_GRAY2BGR);
 
-  std::vector<std::vector<cv::Point>> selected_contours;
-  std::vector<std::vector<cv::Point>> current_contours;
+  std::vector<Contour> selected_contours;
+  std::vector<Contour> current_contours;
   selected_contours.reserve(particles.size());
   current_contours.reserve(particles.size());
 
@@ -48,6 +50,20 @@ void draw_particles_on_frame(cv::InputArray &input,
                    8);
 
   if (draw_trajectory) {
+    std::vector<Contour> predicted_contours;
+    predicted_contours.reserve(particles.size());
+    std::transform(particles.begin(), particles.end(),
+                   std::back_inserter(predicted_contours),
+                   [](const Particle &p) {
+                     Contour c = p.lastContour();
+                     cv::Point offset =
+                         p.predictedPosition(p.lastFrame() + 1) - p.position();
+                     std::for_each(c.begin(), c.end(),
+                                   [&offset](cv::Point &pt) { pt += offset; });
+                     return c;
+                   });
+    cv::drawContours(output, predicted_contours, -1, cv::Scalar(255, 0, 0), 1.0,
+                     8);
     std::vector<std::vector<cv::Point>> lines;
     lines.reserve(particles.size());
     for (const auto &p : particles) {
@@ -99,6 +115,7 @@ int main(int argc, char *argv[]) {
 
   int background_frames = 1000;
   int particle_frames = 10;
+  int draw_fps = 30;
 
   double particle_distance = 5.0;
   double zscore = 3.0;
@@ -144,7 +161,7 @@ int main(int argc, char *argv[]) {
          "--background", background_frames,
          "number of background frames used to determine initial mean and std")
       ->check(CLI::PositiveNumber);
-  app.add_option("--track", particle_frames,
+  app.add_option("--track,--frames", particle_frames,
                  "number of frames to track particles after last detection")
       ->check(CLI::PositiveNumber);
   app.add_flag("--trajectory", trajectory,
@@ -164,6 +181,7 @@ int main(int argc, char *argv[]) {
 
   app.add_flag("--draw", draw, "show video and detections")
       ->configurable(false);
+  app.add_option("--fps", draw_fps, "maximum FPS when --draw is passed");
 #ifdef ENABLE_HDF5_EXPORT
   app.add_flag("--export-hdf5", export_hdf5,
                "export VTK compatible HDF5 data sets for each particle")
@@ -369,9 +387,16 @@ int main(int argc, char *argv[]) {
     // find and filter contours
     //
 
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(threshold, contours, cv::RETR_EXTERNAL,
+    std::vector<Contour> _contours;
+    cv::findContours(threshold, _contours, cv::RETR_EXTERNAL,
                      cv::CHAIN_APPROX_SIMPLE);
+
+    std::vector<std::pair<Contour, cv::Moments>> contours;
+    contours.reserve(contours.size());
+    std::transform(_contours.begin(), _contours.end(),
+                   std::back_inserter(contours), [](const Contour &contour) {
+                     return std::make_pair(contour, cv::moments(contour));
+                   });
 
     filter_contours(contours, processed, contour_filter_args);
 
@@ -389,38 +414,56 @@ int main(int argc, char *argv[]) {
 
     std::for_each(
         contours.begin(), contours.end(),
-        [&](const std::vector<cv::Point> &contour) {
+        [&](const std::pair<Contour, cv::Moments> &p) {
           bool existing = false;
           for (auto &particle : particles) {
-            cv::Rect rect = cv::boundingRect(contour);
-            cv::Rect particle_rect = cv::boundingRect(particle.contour());
+            cv::Rect rect = cv::boundingRect(p.first);
+
+            Contour particle_contour = particle.lastContour();
+            // = particle.contour();
+            if (trajectory) {
+              Contour shifted;
+              cv::Point offset =
+                  particle.predictedPosition(frame_pos) - particle.position();
+              std::transform(particle_contour.begin(), particle_contour.end(),
+                             particle_contour.begin(),
+                             [&offset](cv::Point &p) { return p + offset; });
+              // particle_contour = shifted;
+            }
+
+            cv::Rect particle_rect = cv::boundingRect(particle_contour);
             // check boxes first, early exit if far
             double dist = box_edge_distance(rect, particle_rect);
             if (dist > particle_distance)
               continue;
 
-            // finer check for close particles, larger contour as first
+            // finer check for close particles, larger contour as
+            // first
             if (rect.size().area() > particle_rect.size().area()) {
-              dist = contour_edge_distance(contour, particle.contour());
+              dist = contour_edge_distance(p.first, particle_contour);
             } else {
-              dist = contour_edge_distance(particle.contour(), contour);
+              dist = contour_edge_distance(particle_contour, p.first);
             }
 
             if (dist < particle_distance) {
-              particle.update(frame_pos, contour, cpu_proc, cpu_frame);
+              particle.update(frame_pos, p, cpu_proc, cpu_frame);
+              if (trajectory)
+                particle.updateTrajectory();
               existing = true;
               break;
             }
           }
           if (!existing) {
-            particles.push_back(
-                Particle(frame_pos, contour, cpu_proc, cpu_frame));
+            auto particle = Particle(frame_pos, p, cpu_proc, cpu_frame);
+            if (trajectory)
+              particle.initTrajectory();
+            particles.push_back(particle);
             particle_count += 1;
           }
         });
 
     //
-    // remove untrakced (old) particles from the vector
+    // remove untracked (old) particles from the vector
     //
 
     auto pivot = std::stable_partition(
@@ -444,7 +487,7 @@ int main(int argc, char *argv[]) {
                  cv::Scalar(0, 255, 0), 1);
       cv::imshow("frame", rgb_frame);
 
-      int key = cv::waitKey(20);
+      int key = cv::waitKey(1000 / draw_fps);
       if (key == 'q') {
         break;
       }
