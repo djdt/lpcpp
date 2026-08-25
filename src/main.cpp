@@ -50,23 +50,20 @@ void draw_particles_on_frame(cv::InputArray &input,
                    8);
 
   if (draw_trajectory) {
-    // std::vector<Contour> predicted_contours;
-    // predicted_contours.reserve(particles.size());
-    // std::transform(particles.begin(), particles.end(),
-    //                std::back_inserter(predicted_contours),
-    //                [](const Particle &p) {
-    //                  Contour c = p.contour();
-    //                  cv::Point offset =
-    //                      p.predictedPosition(p.lastFrame() + 1) -
-    //                      p.position();
-    //                  std::for_each(c.begin(), c.end(),
-    //                                [&offset](cv::Point &pt) { pt += offset;
-    //                                });
-    //                  return c;
-    //                });
-    // cv::drawContours(output, predicted_contours, -1, cv::Scalar(255, 0,
-    // 0), 1.0,
-    //                  8);
+    std::vector<Contour> predicted_contours;
+    predicted_contours.reserve(particles.size());
+    std::transform(particles.begin(), particles.end(),
+                   std::back_inserter(predicted_contours),
+                   [](const Particle &p) {
+                     Contour c = p.lastContour();
+                     cv::Point offset =
+                         p.predictedPosition(p.lastFrame() + 1) - p.position();
+                     std::for_each(c.begin(), c.end(),
+                                   [&offset](cv::Point &pt) { pt += offset; });
+                     return c;
+                   });
+    cv::drawContours(output, predicted_contours, -1, cv::Scalar(255, 0, 0), 1.0,
+                     8);
     std::vector<std::vector<cv::Point>> lines;
     lines.reserve(particles.size());
     for (const auto &p : particles) {
@@ -118,6 +115,7 @@ int main(int argc, char *argv[]) {
 
   int background_frames = 1000;
   int particle_frames = 10;
+  int draw_fps = 30;
 
   double particle_distance = 5.0;
   double zscore = 3.0;
@@ -183,6 +181,7 @@ int main(int argc, char *argv[]) {
 
   app.add_flag("--draw", draw, "show video and detections")
       ->configurable(false);
+  app.add_option("--fps", draw_fps, "maximum FPS when --draw is passed");
 #ifdef ENABLE_HDF5_EXPORT
   app.add_flag("--export-hdf5", export_hdf5,
                "export VTK compatible HDF5 data sets for each particle")
@@ -420,7 +419,7 @@ int main(int argc, char *argv[]) {
           for (auto &particle : particles) {
             cv::Rect rect = cv::boundingRect(p.first);
 
-            Contour particle_contour = particle.contour();
+            Contour particle_contour = particle.lastContour();
             // = particle.contour();
             if (trajectory) {
               Contour shifted;
@@ -488,7 +487,7 @@ int main(int argc, char *argv[]) {
                  cv::Scalar(0, 255, 0), 1);
       cv::imshow("frame", rgb_frame);
 
-      int key = cv::waitKey(20);
+      int key = cv::waitKey(1000 / draw_fps);
       if (key == 'q') {
         break;
       }
