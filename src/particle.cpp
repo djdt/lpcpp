@@ -29,6 +29,11 @@ Particle::Particle(const int frame_number,
     _raw_images.push_back(raw_image(rect).clone());
   }
 
+  _metric =
+      calculate_selection_metric(contour_pair, _images.back(), _metric_method);
+};
+
+void Particle::initTrajectory() {
   _kalman.init(4, 2);
 
   static float t_vals[4][4] = {{1.f, 0.f, 1.f, 0.f},
@@ -44,14 +49,11 @@ Particle::Particle(const int frame_number,
   cv::setIdentity(_kalman.errorCovPost, 1.f);
 
   _kalman.statePost = cv::Mat::zeros(4, 1, CV_32F);
-  _kalman.statePost.at<float>(0) =
-      contour_pair.second.m10 / contour_pair.second.m00;
-  _kalman.statePost.at<float>(1) =
-      contour_pair.second.m01 / contour_pair.second.m00;
 
-  _metric =
-      calculate_selection_metric(contour_pair, _images.back(), _metric_method);
-};
+  cv::Moments moments = _contours.back().second;
+  _kalman.statePost.at<float>(0) = moments.m10 / moments.m00;
+  _kalman.statePost.at<float>(1) = moments.m01 / moments.m00;
+}
 
 const int Particle::frameCount() const { return _frames.size(); }
 const long Particle::id() const { return _id; }
@@ -131,11 +133,13 @@ void Particle::update(const int frame_number,
     _metric = metric;
     _index = _frames.size() - 1;
   }
+}
 
-  cv::Moments m = _contours.back().second;
+void Particle::updateTrajectory() {
+  cv::Moments moments = _contours.back().second;
   cv::Mat measurement = cv::Mat(2, 1, CV_32F);
-  measurement.at<float>(0) = m.m10 / m.m00;
-  measurement.at<float>(1) = m.m01 / m.m00;
+  measurement.at<float>(0) = moments.m10 / moments.m00;
+  measurement.at<float>(1) = moments.m01 / moments.m00;
 
   _kalman.predict();
   _kalman.correct(measurement);

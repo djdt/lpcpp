@@ -38,6 +38,10 @@ public:
            const cv::Mat &image, const cv::Mat &raw_image,
            ParticleFrameMetric metric = METRIC_CENTER_WEIGHTED_INTENSITY);
 
+  void initTrajectory(); // separated for performance
+
+  const cv::Rect boundingRect() const;
+
   const int frameCount() const;
   const long id() const;
 
@@ -50,11 +54,10 @@ public:
   const cv::Mat &image(const int index = -1) const;
   const cv::Moments &moments(const int index = -1) const;
   const cv::Mat &rawImage(const int index = -1) const;
-
-  const cv::Rect boundingRect() const;
   void update(const int frame_number,
               const std::pair<Contour, cv::Moments> &contour_pair,
               const cv::Mat &image, const cv::Mat &raw_image);
+  void updateTrajectory();
 
   cv::Point2f position() const;
   cv::Point2f velocity() const;

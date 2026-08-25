@@ -50,6 +50,23 @@ void draw_particles_on_frame(cv::InputArray &input,
                    8);
 
   if (draw_trajectory) {
+    // std::vector<Contour> predicted_contours;
+    // predicted_contours.reserve(particles.size());
+    // std::transform(particles.begin(), particles.end(),
+    //                std::back_inserter(predicted_contours),
+    //                [](const Particle &p) {
+    //                  Contour c = p.contour();
+    //                  cv::Point offset =
+    //                      p.predictedPosition(p.lastFrame() + 1) -
+    //                      p.position();
+    //                  std::for_each(c.begin(), c.end(),
+    //                                [&offset](cv::Point &pt) { pt += offset;
+    //                                });
+    //                  return c;
+    //                });
+    // cv::drawContours(output, predicted_contours, -1, cv::Scalar(255, 0,
+    // 0), 1.0,
+    //                  8);
     std::vector<std::vector<cv::Point>> lines;
     lines.reserve(particles.size());
     for (const auto &p : particles) {
@@ -402,13 +419,18 @@ int main(int argc, char *argv[]) {
           bool existing = false;
           for (auto &particle : particles) {
             cv::Rect rect = cv::boundingRect(p.first);
-            const auto particle_contour = particle.contour();
 
-            // if (trajectory) {
-            //   std::for_each(contour.begin(), contour.end(), [](cv::Point p) {
-            //       p +=
-            //       })
-            // }
+            Contour particle_contour = particle.contour();
+            // = particle.contour();
+            if (trajectory) {
+              Contour shifted;
+              cv::Point offset =
+                  particle.predictedPosition(frame_pos) - particle.position();
+              std::transform(particle_contour.begin(), particle_contour.end(),
+                             particle_contour.begin(),
+                             [&offset](cv::Point &p) { return p + offset; });
+              // particle_contour = shifted;
+            }
 
             cv::Rect particle_rect = cv::boundingRect(particle_contour);
             // check boxes first, early exit if far
@@ -416,7 +438,8 @@ int main(int argc, char *argv[]) {
             if (dist > particle_distance)
               continue;
 
-            // finer check for close particles, larger contour as first
+            // finer check for close particles, larger contour as
+            // first
             if (rect.size().area() > particle_rect.size().area()) {
               dist = contour_edge_distance(p.first, particle_contour);
             } else {
@@ -425,12 +448,17 @@ int main(int argc, char *argv[]) {
 
             if (dist < particle_distance) {
               particle.update(frame_pos, p, cpu_proc, cpu_frame);
+              if (trajectory)
+                particle.updateTrajectory();
               existing = true;
               break;
             }
           }
           if (!existing) {
-            particles.push_back(Particle(frame_pos, p, cpu_proc, cpu_frame));
+            auto particle = Particle(frame_pos, p, cpu_proc, cpu_frame);
+            if (trajectory)
+              particle.initTrajectory();
+            particles.push_back(particle);
             particle_count += 1;
           }
         });
