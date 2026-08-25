@@ -164,8 +164,6 @@ int main(int argc, char *argv[]) {
   app.add_option("--track,--frames", particle_frames,
                  "number of frames to track particles after last detection")
       ->check(CLI::PositiveNumber);
-  app.add_flag("--trajectory", trajectory,
-               "calculate particle trajectories to predict particle positions");
   app.add_option("--distance", particle_distance,
                  "minimum distance between particles")
       ->check(CLI::PositiveNumber);
@@ -181,7 +179,11 @@ int main(int argc, char *argv[]) {
 
   app.add_flag("--draw", draw, "show video and detections")
       ->configurable(false);
-  app.add_option("--fps", draw_fps, "maximum FPS when --draw is passed");
+  app.add_option("--fps", draw_fps, "maximum FPS when --draw is passed")
+      ->check(CLI::PositiveNumber);
+  ;
+  app.add_flag("--trajectory", trajectory,
+               "calculate particle trajectories to predict particle positions");
 #ifdef ENABLE_HDF5_EXPORT
   app.add_flag("--export-hdf5", export_hdf5,
                "export VTK compatible HDF5 data sets for each particle")

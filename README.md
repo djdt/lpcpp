@@ -31,16 +31,13 @@ To run lpcpp pass a inline microscopy file and any options ```lpcpp [OPTIONS] fi
 
 The following options are available:
 ```
-lpcpp [OPTIONS] file [SUBCOMMANDS]
-
-
 POSITIONALS:
   file TEXT:FILE REQUIRED     path to the captured OIM video
 
 OPTIONS:
   -h,     --help              
   -o,     --output TEXT:(PATH(non-existing)) OR (DIR) 
-                              specify the output directory, defaults to 'processed'
+                              specify the output directory, defaults to './processed'
           --selection-metric ENUM:value in {averageIntensity->0,centralIntensity->1,sharpness->2} OR {0,1,2} [1]  
                               method of selecting the particle frame for processing
           --detection-mode ENUM:value in {absolute->2,dark->1,light->0} OR {2,1,0} [1]  
@@ -48,7 +45,7 @@ OPTIONS:
           --background INT:POSITIVE [1000]  
                               number of background frames used to determine initial mean and
                               std
-          --track INT:POSITIVE [50]  
+          --track, --frames INT:POSITIVE [10]  
                               number of frames to track particles after last detection
           --distance FLOAT:POSITIVE [5]  
                               minimum distance between particles
@@ -60,11 +57,15 @@ OPTIONS:
                               capillary position and radius <x> <y> <radius>. If 0, try to read
                               from video
           --draw              show video and detections
-          --export-images     export an image of each particle
+          --fps INT:POSITIVE [30]  
+                              maximum FPS when --draw is passed
+          --trajectory        calculate particle trajectories to predict particle positions
           --export-hdf5       export VTK compatible HDF5 data sets for each particle
-  -v,     --version           display version and exit
+          --export-png        export a PNG image for each particle
+          --export-vti        export a VTK ImageDara for each particle
           --create-config     write default values to a new config file at 'file'
           --config            read options from a config file
+  -v,     --version           display version and exit
 
 SUBCOMMANDS:
 filter
@@ -83,7 +84,7 @@ OPTIONS:
           --intensity [FLOAT,FLOAT]:NONNEGATIVE [[1000,1e+06]]  
                               allowed particle intensity (darkness)
           --radius [FLOAT,FLOAT]:NONNEGATIVE [[1,11000]]  
-                              allowed particle radius
+                              allowed particle diameter
           --sharpness [FLOAT,FLOAT]:NONNEGATIVE [[0,0]]  
                               allowed particle sharpness
 ```
