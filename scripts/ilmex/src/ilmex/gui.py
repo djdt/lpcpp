@@ -6,7 +6,7 @@ import numpy as np
 import numpy.lib.recfunctions as rfn
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from ilmex.charts import HistogramChart, ScatterChart
+from ilmex.charts import HistogramChart, ScatterChart, TimeSeriesChart
 from ilmex.colors import cividis
 from ilmex.widgets import RangeSlider
 
@@ -221,7 +221,9 @@ class CapillaryWidget(QtWidgets.QWidget):
         self.view.scale(4.0 / 25.0, 4.0 / 25.0)
 
         layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.view, 1)
+        layout_horz = QtWidgets.QHBoxLayout()
+        layout_horz.addWidget(self.view)
+        layout.addLayout(layout_horz, 1)
         layout.addWidget(self.count, 0)
 
         self.setLayout(layout)
@@ -253,6 +255,19 @@ class CapillaryWidget(QtWidgets.QWidget):
 
         self.image.setImage(image)
         self.count.setText(f"Particles: {data.size}")
+
+
+class TimeSeriesWidget(QtWidgets.QWidget):
+    def __init__(self, parent: QtWidgets.QWidget | None = None):
+        super().__init__(parent)
+        self.chart = TimeSeriesChart()
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.chart)
+        self.setLayout(layout)
+
+    def updateTimeSeries(self, data: np.ndarray):
+        self.chart.updateTimeSeries(data)
 
 
 class ExplorerWindow(QtWidgets.QMainWindow):
@@ -348,6 +363,8 @@ class ExplorerWindow(QtWidgets.QMainWindow):
 
         self.capillary = CapillaryWidget()
 
+        self.time_series = TimeSeriesWidget()
+
         self.sliders = {}
         for name, (vmin, vmax, scale) in ExplorerWindow.VALID_RANGES.items():
             if name not in self.data.dtype.names:
@@ -389,18 +406,25 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         controls_dock.setWidget(controls_widget)
         self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, controls_dock)
 
+        scatter_dock = QtWidgets.QDockWidget("Scatter")
+        scatter_dock.setWidget(self.scatter)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.LeftDockWidgetArea, scatter_dock)
+
         hist_dock = QtWidgets.QDockWidget("Histogram")
         hist_dock.setWidget(self.hist)
         self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, hist_dock)
 
-        scatter_dock = QtWidgets.QDockWidget("Scatter")
-        scatter_dock.setWidget(self.scatter)
-        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, scatter_dock)
+        time_dock = QtWidgets.QDockWidget("Time Series")
+        time_dock.setWidget(self.time_series)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, time_dock)
 
-        self.tabifyDockWidget(scatter_dock, hist_dock)
+        self.tabifyDockWidget(scatter_dock, controls_dock)
 
         self.resizeDocks(
-            [controls_dock, hist_dock], [350, 850], QtCore.Qt.Orientation.Horizontal
+            [scatter_dock, hist_dock], [350, 850], QtCore.Qt.Orientation.Horizontal
+        )
+        self.resizeDocks(
+            [hist_dock, time_dock], [600, 200], QtCore.Qt.Orientation.Vertical
         )
 
         self.createMenuBar()
@@ -537,10 +561,11 @@ class ExplorerWindow(QtWidgets.QMainWindow):
         self.redrawHistogram()
         self.redrawCapillary()
         self.redrawScatter()
+        self.redrawTimeSeries()
 
     def redrawCapillary(self):
-        data = self.filteredData(True, True)
-        self.capillary.updateImage(data)
+        data, mask = self.dataAndMask()
+        self.capillary.updateImage(data[mask])
 
     def redrawHistogram(self):
         data, mask = self.dataAndMask()
@@ -555,6 +580,10 @@ class ExplorerWindow(QtWidgets.QMainWindow):
             self.scatter.updateScatter(data, mask)
         else:
             self.scatter.updateScatter(data[mask])
+
+    def redrawTimeSeries(self):
+        data, mask = self.dataAndMask()
+        self.time_series.updateTimeSeries(data[mask])
 
     def updateScatterROI(self):
         data, _ = self.dataAndMask()

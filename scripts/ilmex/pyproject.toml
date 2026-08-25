@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ilmex"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
     "numpy >= 2.0.0",
     "PySide6 >= 6.10",

@@ -1,6 +1,7 @@
 import argparse
-from pathlib import Path
 from importlib.metadata import version
+from pathlib import Path
+
 from PySide6 import QtWidgets
 
 from ilmex.gui import ExplorerWindow
