@@ -4,9 +4,9 @@
 #include <opencv2/videoio.hpp>
 
 enum PreprocessImageMode {
-  PROC_MODE_NORMAL, // light
-  PROC_MODE_INVERT, // dark
   PROC_MODE_ABSOLUTE,
+  PROC_MODE_INVERT, // dark
+  PROC_MODE_NORMAL, // light
 };
 
 std::array<float, 3> find_capillary(cv::InputArray &input);

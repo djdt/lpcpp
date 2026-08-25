@@ -135,9 +135,9 @@ int main(int argc, char *argv[]) {
       {"sharpness", METRIC_SHARPNESS}};
   PreprocessImageMode preprocess_mode = PROC_MODE_INVERT;
   std::map<std::string, PreprocessImageMode> mode_map = {
-      {"light", PROC_MODE_NORMAL},
+      {"absolute", PROC_MODE_ABSOLUTE},
       {"dark", PROC_MODE_INVERT},
-      {"absolute", PROC_MODE_ABSOLUTE}};
+      {"light", PROC_MODE_NORMAL}};
 
   filter_args contour_filter_args;
 

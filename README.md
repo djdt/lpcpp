@@ -40,7 +40,7 @@ OPTIONS:
                               specify the output directory, defaults to './processed'
           --selection-metric ENUM:value in {averageIntensity->0,centralIntensity->1,sharpness->2} OR {0,1,2} [1]  
                               method of selecting the particle frame for processing
-          --detection-mode ENUM:value in {absolute->2,dark->1,light->0} OR {2,1,0} [1]  
+          --detection-mode ENUM:value in {absolute->0,dark->1,light->2} OR {0,1,2} [1]  
                               method of thresholding differences from the background
           --background INT:POSITIVE [1000]  
                               number of background frames used to determine initial mean and
